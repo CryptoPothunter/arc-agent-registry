@@ -30,6 +30,8 @@ contract AgentRegistry is Ownable, ReentrancyGuard {
     // trusted contracts (e.g. TaskEscrow) allowed to call updateReputation
     mapping(address => bool) public trustedContracts;
 
+    uint256[] public activeAgentIds;
+
     event AgentRegistered(uint256 indexed agentId, address indexed owner, address wallet, string metadataCID);
     event AgentUpdated(uint256 indexed agentId, string metadataCID);
     event AvailabilityChanged(uint256 indexed agentId, bool isActive);
@@ -78,16 +80,21 @@ contract AgentRegistry is Ownable, ReentrancyGuard {
             _capabilityToAgents[capabilityHashes[i]].push(agentId);
         }
 
+        if (startActive) {
+            activeAgentIds.push(agentId);
+        }
+
         emit AgentRegistered(agentId, msg.sender, wallet, metadataCID);
         return agentId;
     }
 
-    function updateMetadata(string calldata metadataCID) external {
+    function updateMetadata(string calldata metadataCID, uint256 newBasePrice) external {
         uint256 agentId = ownerToAgent[msg.sender];
         require(agentId != 0, "AgentRegistry: not registered");
         require(bytes(metadataCID).length > 0, "AgentRegistry: empty metadataCID");
 
         agents[agentId].metadataCID = metadataCID;
+        agents[agentId].basePriceUsdc = newBasePrice;
         agents[agentId].updatedAt = block.timestamp;
 
         emit AgentUpdated(agentId, metadataCID);
@@ -99,6 +106,10 @@ contract AgentRegistry is Ownable, ReentrancyGuard {
 
         agents[agentId].isActive = _isActive;
         agents[agentId].updatedAt = block.timestamp;
+
+        if (_isActive) {
+            activeAgentIds.push(agentId);
+        }
 
         emit AvailabilityChanged(agentId, _isActive);
     }

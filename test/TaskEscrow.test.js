@@ -165,7 +165,8 @@ describe("TaskEscrow", function () {
       const tid = taskId("task-dispute-req");
       await taskEscrow.connect(requester).deposit(tid, depositAmount, provider.address, deadline, agreementHash);
 
-      await expect(taskEscrow.connect(requester).dispute(tid))
+      const evidenceHash = ethers.keccak256(ethers.toUtf8Bytes("test evidence"));
+      await expect(taskEscrow.connect(requester).dispute(tid, evidenceHash))
         .to.emit(taskEscrow, "DisputeRaised")
         .withArgs(tid, requester.address);
 
@@ -177,7 +178,8 @@ describe("TaskEscrow", function () {
       const tid = taskId("task-dispute-prov");
       await taskEscrow.connect(requester).deposit(tid, depositAmount, provider.address, deadline, agreementHash);
 
-      await expect(taskEscrow.connect(provider).dispute(tid))
+      const evidenceHash = ethers.keccak256(ethers.toUtf8Bytes("test evidence"));
+      await expect(taskEscrow.connect(provider).dispute(tid, evidenceHash))
         .to.emit(taskEscrow, "DisputeRaised")
         .withArgs(tid, provider.address);
     });
@@ -186,7 +188,8 @@ describe("TaskEscrow", function () {
       const tid = taskId("task-dispute-third");
       await taskEscrow.connect(requester).deposit(tid, depositAmount, provider.address, deadline, agreementHash);
 
-      await expect(taskEscrow.connect(owner).dispute(tid)).to.be.revertedWith(
+      const evidenceHash = ethers.keccak256(ethers.toUtf8Bytes("test evidence"));
+      await expect(taskEscrow.connect(owner).dispute(tid, evidenceHash)).to.be.revertedWith(
         "TaskEscrow: only requester or provider can dispute"
       );
     });

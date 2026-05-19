@@ -17,6 +17,7 @@ const registryRoutes = require('./routes/registry.routes');
 const discoveryRoutes = require('./routes/discovery.routes');
 const negotiationRoutes = require('./routes/negotiation.routes');
 const escrowRoutes = require('./routes/escrow.routes');
+const settlementRoutes = require('./routes/settlement.routes');
 
 const PORT = process.env.PORT || 3001;
 
@@ -98,6 +99,7 @@ app.use('/api/registry', registryRoutes);
 app.use('/api/discovery', discoveryRoutes);
 app.use('/api/negotiation', negotiationRoutes);
 app.use('/api/escrow', escrowRoutes);
+app.use('/api/settlement', settlementRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

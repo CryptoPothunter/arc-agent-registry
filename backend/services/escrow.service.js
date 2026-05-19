@@ -113,7 +113,7 @@ class EscrowService {
    * @param {string} taskId
    * @returns {Promise<object>}
    */
-  async releaseFunds(taskId) {
+  async releaseFunds(taskId, options = {}) {
     if (this.contract && this.signer) {
       const taskHash = typeof taskId === 'string' && taskId.startsWith('0x')
         ? taskId

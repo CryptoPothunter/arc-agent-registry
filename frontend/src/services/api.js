@@ -46,12 +46,15 @@ export const proposeNegotiation = (data) =>
 export const getNegotiationStatus = (negotiationId) =>
   request(`/negotiation/${negotiationId}/status`);
 
+export const respondToNegotiation = (negotiationId, data) =>
+  request(`/negotiation/${negotiationId}/respond`, { method: 'POST', body: JSON.stringify(data) });
+
 // Escrow
 export const depositEscrow = (data) =>
   request('/escrow/deposit', { method: 'POST', body: JSON.stringify(data) });
 
-export const releaseEscrow = (taskId) =>
-  request(`/escrow/${taskId}/release`, { method: 'POST' });
+export const releaseEscrow = (taskId, data = {}) =>
+  request(`/escrow/${taskId}/release`, { method: 'POST', body: JSON.stringify(data) });
 
 export const disputeEscrow = (taskId, data) =>
   request(`/escrow/${taskId}/dispute`, { method: 'POST', body: JSON.stringify(data) });
@@ -66,6 +69,7 @@ export default {
   searchAgents,
   proposeNegotiation,
   getNegotiationStatus,
+  respondToNegotiation,
   depositEscrow,
   releaseEscrow,
   disputeEscrow,

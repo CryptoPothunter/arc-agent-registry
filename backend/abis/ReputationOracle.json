@@ -6,53 +6,141 @@
   },
   {
     "inputs": [
-      { "internalType": "address", "name": "_caller", "type": "address" },
-      { "internalType": "bool", "name": "_trusted", "type": "bool" }
+      {
+        "internalType": "address",
+        "name": "owner",
+        "type": "address"
+      }
     ],
-    "name": "setTrustedCaller",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
+    "name": "OwnableInvalidOwner",
+    "type": "error"
   },
   {
     "inputs": [
-      { "internalType": "uint256", "name": "agentId", "type": "uint256" },
-      { "internalType": "uint256", "name": "rating", "type": "uint256" }
+      {
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      }
     ],
-    "name": "submitRating",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
+    "name": "OwnableUnauthorizedAccount",
+    "type": "error"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "previousOwner",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "newOwner",
+        "type": "address"
+      }
+    ],
+    "name": "OwnershipTransferred",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "agentId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "rating",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "newAverage",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "rater",
+        "type": "address"
+      }
+    ],
+    "name": "RatingSubmitted",
+    "type": "event"
   },
   {
     "inputs": [
-      { "internalType": "uint256", "name": "agentId", "type": "uint256" }
+      {
+        "internalType": "uint256",
+        "name": "agentId",
+        "type": "uint256"
+      }
     ],
     "name": "getAverageScore",
-    "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
     "stateMutability": "view",
     "type": "function"
   },
   {
     "inputs": [
-      { "internalType": "uint256", "name": "agentId", "type": "uint256" }
+      {
+        "internalType": "uint256",
+        "name": "agentId",
+        "type": "uint256"
+      }
     ],
     "name": "getRatingHistory",
-    "outputs": [{ "internalType": "uint256[]", "name": "", "type": "uint256[]" }],
+    "outputs": [
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
+      }
+    ],
     "stateMutability": "view",
     "type": "function"
   },
   {
     "inputs": [
-      { "internalType": "uint256", "name": "agentId", "type": "uint256" }
+      {
+        "internalType": "uint256",
+        "name": "agentId",
+        "type": "uint256"
+      }
     ],
     "name": "getReputationRecord",
     "outputs": [
       {
         "components": [
-          { "internalType": "uint256", "name": "totalScore", "type": "uint256" },
-          { "internalType": "uint256", "name": "ratingCount", "type": "uint256" },
-          { "internalType": "uint256", "name": "averageScore", "type": "uint256" }
+          {
+            "internalType": "uint256",
+            "name": "totalScore",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "ratingCount",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "averageScore",
+            "type": "uint256"
+          }
         ],
         "internalType": "struct ReputationOracle.ReputationRecord",
         "name": "",
@@ -63,41 +151,39 @@
     "type": "function"
   },
   {
-    "inputs": [
-      { "internalType": "uint256", "name": "", "type": "uint256" }
-    ],
-    "name": "reputations",
-    "outputs": [
-      { "internalType": "uint256", "name": "totalScore", "type": "uint256" },
-      { "internalType": "uint256", "name": "ratingCount", "type": "uint256" },
-      { "internalType": "uint256", "name": "averageScore", "type": "uint256" }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      { "internalType": "uint256", "name": "", "type": "uint256" },
-      { "internalType": "uint256", "name": "", "type": "uint256" }
-    ],
-    "name": "ratingHistory",
-    "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      { "internalType": "address", "name": "", "type": "address" }
-    ],
-    "name": "trustedCallers",
-    "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
     "inputs": [],
     "name": "owner",
-    "outputs": [{ "internalType": "address", "name": "", "type": "address" }],
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "name": "ratingHistory",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
     "stateMutability": "view",
     "type": "function"
   },
@@ -110,7 +196,76 @@
   },
   {
     "inputs": [
-      { "internalType": "address", "name": "newOwner", "type": "address" }
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "name": "reputations",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "totalScore",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "ratingCount",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "averageScore",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_caller",
+        "type": "address"
+      },
+      {
+        "internalType": "bool",
+        "name": "_trusted",
+        "type": "bool"
+      }
+    ],
+    "name": "setTrustedCaller",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "agentId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "rating",
+        "type": "uint256"
+      }
+    ],
+    "name": "submitRating",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "newOwner",
+        "type": "address"
+      }
     ],
     "name": "transferOwnership",
     "outputs": [],
@@ -118,22 +273,22 @@
     "type": "function"
   },
   {
-    "anonymous": false,
     "inputs": [
-      { "indexed": true, "internalType": "uint256", "name": "agentId", "type": "uint256" },
-      { "indexed": false, "internalType": "uint256", "name": "rating", "type": "uint256" },
-      { "indexed": false, "internalType": "uint256", "name": "newAverage", "type": "uint256" }
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
     ],
-    "name": "RatingSubmitted",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      { "indexed": true, "internalType": "address", "name": "previousOwner", "type": "address" },
-      { "indexed": true, "internalType": "address", "name": "newOwner", "type": "address" }
+    "name": "trustedCallers",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
     ],
-    "name": "OwnershipTransferred",
-    "type": "event"
+    "stateMutability": "view",
+    "type": "function"
   }
 ]

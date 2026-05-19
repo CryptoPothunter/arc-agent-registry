@@ -124,7 +124,8 @@ describe("AgentRegistry", function () {
     it("should update metadata CID", async function () {
       await agentRegistry.connect(agent1).register(agent1.address, metadataCID, capabilityHashes, basePriceUsdc, true);
 
-      await expect(agentRegistry.connect(agent1).updateMetadata(updatedCID))
+      const newBasePrice = ethers.parseUnits('3', 6);
+      await expect(agentRegistry.connect(agent1).updateMetadata(updatedCID, newBasePrice))
         .to.emit(agentRegistry, "AgentUpdated")
         .withArgs(1, updatedCID);
 
@@ -133,7 +134,7 @@ describe("AgentRegistry", function () {
     });
 
     it("should reject update from unregistered address", async function () {
-      await expect(agentRegistry.connect(agent2).updateMetadata(updatedCID)).to.be.revertedWith(
+      await expect(agentRegistry.connect(agent2).updateMetadata(updatedCID, ethers.parseUnits('3', 6))).to.be.revertedWith(
         "AgentRegistry: not registered"
       );
     });
@@ -141,7 +142,7 @@ describe("AgentRegistry", function () {
     it("should reject empty metadata CID", async function () {
       await agentRegistry.connect(agent1).register(agent1.address, metadataCID, capabilityHashes, basePriceUsdc, true);
 
-      await expect(agentRegistry.connect(agent1).updateMetadata("")).to.be.revertedWith(
+      await expect(agentRegistry.connect(agent1).updateMetadata("", ethers.parseUnits('3', 6))).to.be.revertedWith(
         "AgentRegistry: empty metadataCID"
       );
     });

@@ -79,12 +79,12 @@
 ### AgentRegistry.sol
 Handles agent registration and capability indexing on-chain. Each agent receives a unique on-chain identity tied to its wallet address. Capabilities are hashed to `bytes32` and stored in an on-chain index for fast lookup. Metadata is stored on IPFS (CID referenced on-chain). Supports trusted contract authorization for cross-contract reputation updates.
 
-**Key functions:** `register()`, `updateMetadata()`, `setAvailability()`, `getAgent()`, `getAgentsByCapability()`, `updateReputation()`
+**Key functions:** `register()`, `updateMetadata(metadataCID, newBasePrice)`, `setAvailability()`, `getAgent()`, `getAgentsByCapability()`, `updateReputation()`, `activeAgentIds()`
 
 ### TaskEscrow.sol
 Manages trustless USDC escrow for agent-to-agent tasks. Funds are locked when a task agreement is reached and released to the provider upon successful completion. A **0.5% platform fee** is deducted at settlement. Supports timeout-based automatic refunds and dispute resolution.
 
-**Key functions:** `deposit()`, `release()`, `refundOnTimeout()`, `dispute()`
+**Key functions:** `deposit()`, `release()`, `refundOnTimeout()`, `dispute(taskId, evidenceHash)`
 
 ### ReputationOracle.sol
 Maintains on-chain reputation scores for all registered agents. Ratings (1.00-5.00 scale) are submitted after each task completion. Historical rating data is stored on-chain for trend analysis. New agents start with a default 4.00 score.
@@ -112,7 +112,9 @@ Test ERC20 token with 6 decimals and public `mint()` function for local developm
 | POST | `/api/escrow/:taskId/release` | Release escrowed funds to provider |
 | POST | `/api/escrow/:taskId/dispute` | Raise a dispute on a task |
 | GET | `/api/escrow/:taskId/status` | Get escrow status for a task |
-| WebSocket | `wss://<host>/v1/ws` | Real-time negotiation, task, and registry events |
+| POST | `/api/settlement/settle` | Settle a completed task (release + reputation + yield) |
+| GET | `/api/settlement/:taskId/status` | Get settlement status for a task |
+| WebSocket | `ws://<host>:<port>` | Real-time negotiation, task, and registry events |
 
 ---
 
@@ -229,12 +231,14 @@ arc-agent-registry/
 │   │   ├── registry.routes.js    #   /api/registry/* endpoints
 │   │   ├── discovery.routes.js   #   /api/discovery/* endpoints
 │   │   ├── negotiation.routes.js #   /api/negotiation/* endpoints
-│   │   └── escrow.routes.js      #   /api/escrow/* endpoints
+│   │   ├── escrow.routes.js      #   /api/escrow/* endpoints
+│   │   └── settlement.routes.js  #   /api/settlement/* endpoints
 │   ├── services/
 │   │   ├── registry.service.js   #   Agent registration & query logic
 │   │   ├── discovery.service.js  #   AI-powered agent search & matching
 │   │   ├── escrow.service.js     #   USDC deposit, release, dispute
 │   │   ├── settlement.service.js #   End-to-end settlement orchestration
+│   │   ├── reputation.service.js #   On-chain reputation via ReputationOracle
 │   │   ├── ipfs.service.js       #   IPFS/Pinata metadata upload
 │   │   ├── circle-wallet.service.js  # Circle Wallet creation & balance
 │   │   ├── gateway.service.js    #   Circle Gateway cross-chain transfers

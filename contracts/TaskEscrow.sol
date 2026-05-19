@@ -95,7 +95,7 @@ contract TaskEscrow is ReentrancyGuard, Ownable {
         emit FundsRefunded(taskId, task.requester, task.amount);
     }
 
-    function dispute(bytes32 taskId) external {
+    function dispute(bytes32 taskId, bytes32 evidenceHash) external {
         Task storage task = tasks[taskId];
         require(task.status == TaskStatus.Locked, "TaskEscrow: task not locked");
         require(

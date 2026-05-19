@@ -17,7 +17,7 @@ contract ReputationOracle is Ownable {
     // trusted callers
     mapping(address => bool) public trustedCallers;
 
-    event RatingSubmitted(uint256 indexed agentId, uint256 rating, uint256 newAverage);
+    event RatingSubmitted(uint256 indexed agentId, uint256 rating, uint256 newAverage, address rater);
 
     modifier onlyTrusted() {
         require(trustedCallers[msg.sender], "ReputationOracle: caller is not trusted");
@@ -40,7 +40,7 @@ contract ReputationOracle is Ownable {
 
         ratingHistory[agentId].push(rating);
 
-        emit RatingSubmitted(agentId, rating, record.averageScore);
+        emit RatingSubmitted(agentId, rating, record.averageScore, msg.sender);
     }
 
     function getAverageScore(uint256 agentId) external view returns (uint256) {
