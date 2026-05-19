@@ -1,0 +1,105 @@
+[
+  {
+    "inputs": [
+      { "internalType": "string", "name": "metadataURI", "type": "string" },
+      { "internalType": "address", "name": "wallet", "type": "address" },
+      { "internalType": "string[]", "name": "capabilities", "type": "string[]" }
+    ],
+    "name": "register",
+    "outputs": [{ "internalType": "uint256", "name": "agentId", "type": "uint256" }],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "uint256", "name": "agentId", "type": "uint256" }
+    ],
+    "name": "getAgent",
+    "outputs": [
+      {
+        "components": [
+          { "internalType": "uint256", "name": "id", "type": "uint256" },
+          { "internalType": "address", "name": "owner", "type": "address" },
+          { "internalType": "string", "name": "metadataURI", "type": "string" },
+          { "internalType": "address", "name": "wallet", "type": "address" },
+          { "internalType": "string[]", "name": "capabilities", "type": "string[]" },
+          { "internalType": "uint256", "name": "reputationScore", "type": "uint256" },
+          { "internalType": "bool", "name": "available", "type": "bool" },
+          { "internalType": "uint256", "name": "registeredAt", "type": "uint256" }
+        ],
+        "internalType": "struct AgentRegistry.Agent",
+        "name": "",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "uint256", "name": "agentId", "type": "uint256" },
+      { "internalType": "bool", "name": "available", "type": "bool" }
+    ],
+    "name": "setAvailability",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "string", "name": "capability", "type": "string" }
+    ],
+    "name": "getAgentsByCapability",
+    "outputs": [{ "internalType": "uint256[]", "name": "", "type": "uint256[]" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "uint256", "name": "agentId", "type": "uint256" },
+      { "internalType": "uint256", "name": "newScore", "type": "uint256" }
+    ],
+    "name": "updateReputation",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "address", "name": "contractAddr", "type": "address" },
+      { "internalType": "bool", "name": "trusted", "type": "bool" }
+    ],
+    "name": "setTrustedContract",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      { "indexed": true, "internalType": "uint256", "name": "agentId", "type": "uint256" },
+      { "indexed": true, "internalType": "address", "name": "owner", "type": "address" },
+      { "indexed": false, "internalType": "string", "name": "metadataURI", "type": "string" }
+    ],
+    "name": "AgentRegistered",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      { "indexed": true, "internalType": "uint256", "name": "agentId", "type": "uint256" },
+      { "indexed": false, "internalType": "bool", "name": "available", "type": "bool" }
+    ],
+    "name": "AvailabilityChanged",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      { "indexed": true, "internalType": "uint256", "name": "agentId", "type": "uint256" },
+      { "indexed": false, "internalType": "uint256", "name": "newScore", "type": "uint256" }
+    ],
+    "name": "ReputationUpdated",
+    "type": "event"
+  }
+]
