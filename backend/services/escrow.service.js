@@ -35,7 +35,6 @@ class EscrowService {
     this.usyc = new USYCService();
     // Dev fallback store
     this._store = new Map();
-    this._nextTaskId = 1;
   }
 
   /**
@@ -45,12 +44,19 @@ class EscrowService {
    * @param {string} params.amount - USDC amount (human-readable).
    * @param {number} params.deadline - Unix timestamp deadline.
    * @param {string} [params.clientAddress] - Client wallet address.
+   * @param {string} [params.agreementHash] - bytes32 hash of the task agreement.
    * @returns {Promise<object>} Escrow deposit result.
    */
-  async depositFunds({ provider, amount, deadline, clientAddress }) {
+  async depositFunds({ provider, amount, deadline, clientAddress, agreementHash }) {
     if (this.contract && this.signer) {
       const amountWei = ethers.parseUnits(amount, 6);
-      const taskId = this._nextTaskId++;
+      const taskId = ethers.keccak256(
+        ethers.solidityPacked(
+          ['address', 'address', 'uint256', 'uint256'],
+          [clientAddress || this.signer.address, provider, amountWei, deadline]
+        )
+      );
+      const agreement = agreementHash || ethers.ZeroHash;
 
       // Approve escrow contract to spend USDC
       if (USDC_ADDRESS) {
@@ -59,38 +65,46 @@ class EscrowService {
         await approveTx.wait();
       }
 
-      const tx = await this.contract.deposit(taskId, provider, amountWei, deadline);
+      const tx = await this.contract.deposit(taskId, amountWei, provider, deadline, agreement);
       const receipt = await tx.wait();
 
       const escrowData = {
-        taskId: String(taskId),
+        taskId,
         client: clientAddress || this.signer.address,
         provider,
         amount,
         deadline,
+        agreementHash: agreement,
         status: 'locked',
         txHash: receipt.hash,
         createdAt: new Date().toISOString(),
       };
 
-      await syncOnChainEvent('Deposited', escrowData);
+      await syncOnChainEvent('FundsLocked', escrowData);
       return escrowData;
     }
 
     // Dev fallback
-    const taskId = String(this._nextTaskId++);
+    const client = clientAddress || '0x0000000000000000000000000000000000000000';
+    const taskId = ethers.keccak256(
+      ethers.solidityPacked(
+        ['address', 'address', 'string', 'uint256'],
+        [client, provider, amount, deadline]
+      )
+    );
     const escrowData = {
       taskId,
-      client: clientAddress || '0x0000000000000000000000000000000000000000',
+      client,
       provider,
       amount,
       deadline,
+      agreementHash: agreementHash || ethers.ZeroHash,
       status: 'locked',
       createdAt: new Date().toISOString(),
     };
 
     this._store.set(taskId, escrowData);
-    await syncOnChainEvent('Deposited', escrowData);
+    await syncOnChainEvent('FundsLocked', escrowData);
     return escrowData;
   }
 
@@ -101,11 +115,14 @@ class EscrowService {
    */
   async releaseFunds(taskId) {
     if (this.contract && this.signer) {
-      const tx = await this.contract.release(taskId);
+      const taskHash = typeof taskId === 'string' && taskId.startsWith('0x')
+        ? taskId
+        : ethers.keccak256(ethers.toUtf8Bytes(taskId));
+      const tx = await this.contract.release(taskHash);
       const receipt = await tx.wait();
 
-      await syncOnChainEvent('Released', { taskId });
-      return { taskId, status: 'released', txHash: receipt.hash };
+      await syncOnChainEvent('FundsReleased', { taskId: taskHash });
+      return { taskId: taskHash, status: 'released', txHash: receipt.hash };
     }
 
     // Dev fallback
@@ -115,14 +132,14 @@ class EscrowService {
 
     escrow.status = 'released';
     escrow.releasedAt = new Date().toISOString();
-    await syncOnChainEvent('Released', { taskId });
+    await syncOnChainEvent('FundsReleased', { taskId });
     return { taskId, status: 'released' };
   }
 
   /**
    * Raise a dispute on an escrowed task.
    * @param {string} taskId
-   * @param {string} reason - Reason for dispute.
+   * @param {string} reason - Reason for dispute (will be hashed to bytes32 evidenceHash).
    * @returns {Promise<object>}
    */
   async raiseDispute(taskId, reason) {
@@ -130,12 +147,17 @@ class EscrowService {
       throw new Error('Dispute reason is required');
     }
 
+    const evidenceHash = ethers.keccak256(ethers.toUtf8Bytes(reason));
+
     if (this.contract && this.signer) {
-      const tx = await this.contract.dispute(taskId, reason);
+      const taskHash = typeof taskId === 'string' && taskId.startsWith('0x')
+        ? taskId
+        : ethers.keccak256(ethers.toUtf8Bytes(taskId));
+      const tx = await this.contract.dispute(taskHash, evidenceHash);
       const receipt = await tx.wait();
 
-      await syncOnChainEvent('Disputed', { taskId, reason });
-      return { taskId, status: 'disputed', reason, txHash: receipt.hash };
+      await syncOnChainEvent('DisputeRaised', { taskId: taskHash, reason, evidenceHash });
+      return { taskId: taskHash, status: 'disputed', reason, evidenceHash, txHash: receipt.hash };
     }
 
     // Dev fallback
@@ -145,9 +167,10 @@ class EscrowService {
 
     escrow.status = 'disputed';
     escrow.disputeReason = reason;
+    escrow.evidenceHash = evidenceHash;
     escrow.disputedAt = new Date().toISOString();
-    await syncOnChainEvent('Disputed', { taskId, reason });
-    return { taskId, status: 'disputed', reason };
+    await syncOnChainEvent('DisputeRaised', { taskId, reason, evidenceHash });
+    return { taskId, status: 'disputed', reason, evidenceHash };
   }
 
   /**
@@ -161,17 +184,20 @@ class EscrowService {
     if (cached) return cached;
 
     if (this.contract) {
-      const task = await this.contract.getTask(taskId);
+      const taskHash = typeof taskId === 'string' && taskId.startsWith('0x')
+        ? taskId
+        : ethers.keccak256(ethers.toUtf8Bytes(taskId));
+      const task = await this.contract.tasks(taskHash);
       const status = EscrowStatus[Number(task.status)] || 'unknown';
 
       return {
-        taskId,
+        taskId: taskHash,
         client: task.client,
         provider: task.provider,
         amount: ethers.formatUnits(task.amount, 6),
         deadline: Number(task.deadline),
         status,
-        disputeReason: task.disputeReason || null,
+        agreementHash: task.agreementHash,
       };
     }
 

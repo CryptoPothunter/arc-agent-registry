@@ -59,7 +59,7 @@ class SettlementService {
 
         // If on-chain contract is available, update reputation there
         if (this.registry.contract && this.registry.signer) {
-          const tx = await this.registry.contract.updateReputation(providerAgentId, newScore);
+          const tx = await this.registry.contract.updateReputation(providerAgentId, newScore, true);
           await tx.wait();
         }
 

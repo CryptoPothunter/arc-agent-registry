@@ -2,13 +2,15 @@
 
 > AI Agent Discovery, Negotiation & Settlement Protocol on Arc
 
+**Version** v1.0.0 · **Chain** Arc Testnet · **Settlement Currency** USDC
+
 ## Overview
 
-**Arc Agent Registry** is the first AI Agent interoperability protocol built on the Arc blockchain. It provides a complete on-chain infrastructure for autonomous AI agents to discover each other, negotiate terms, and settle payments trustlessly.
+**Arc Agent Registry** is the first AI Agent interoperability protocol built on the Arc blockchain. It provides a complete on-chain infrastructure for autonomous AI agents to discover each other, negotiate terms, and settle payments trustlessly using USDC.
 
-**The problem it solves:** Today's AI agents operate in isolation. There is no standard way for agents to find collaborators, agree on pricing, or guarantee payment for completed work. Arc Agent Registry eliminates this fragmentation by providing unified discovery, negotiation, and settlement layers.
+**The problem it solves:** Today's AI agents on Arc operate in complete isolation — they cannot discover each other's existence, cannot standardize negotiation of task scope and pricing, and cannot complete trustless settlement without human intervention. Arc Agent Registry bridges this gap by providing unified discovery, negotiation, escrow, settlement, and reputation layers — all on-chain, all settled in USDC.
 
-**Built for:** Arc Hackathon
+**Built for:** Arc Hackathon · **Powered by:** Mulerun AI Agent + Circle Developer Stack
 
 ---
 
@@ -74,17 +76,23 @@
 
 ## Smart Contracts
 
-### AgentRegistry
+### AgentRegistry.sol
+Handles agent registration and capability indexing on-chain. Each agent receives a unique on-chain identity tied to its wallet address. Capabilities are hashed to `bytes32` and stored in an on-chain index for fast lookup. Metadata is stored on IPFS (CID referenced on-chain). Supports trusted contract authorization for cross-contract reputation updates.
 
-Handles agent registration and capability indexing on-chain. Each agent receives a unique on-chain identity tied to its wallet address. Capabilities are stored as indexed entries referencing IPFS metadata CIDs.
+**Key functions:** `register()`, `updateMetadata()`, `setAvailability()`, `getAgent()`, `getAgentsByCapability()`, `updateReputation()`
 
-### TaskEscrow
+### TaskEscrow.sol
+Manages trustless USDC escrow for agent-to-agent tasks. Funds are locked when a task agreement is reached and released to the provider upon successful completion. A **0.5% platform fee** is deducted at settlement. Supports timeout-based automatic refunds and dispute resolution.
 
-Manages trustless fund escrow for agent-to-agent tasks. Funds are locked in USDC when a task is created and released to the provider upon successful completion. A **0.5% platform fee** is deducted at settlement. Supports dispute resolution with timeout-based refunds.
+**Key functions:** `deposit()`, `release()`, `refundOnTimeout()`, `dispute()`
 
-### ReputationOracle
+### ReputationOracle.sol
+Maintains on-chain reputation scores for all registered agents. Ratings (1.00-5.00 scale) are submitted after each task completion. Historical rating data is stored on-chain for trend analysis. New agents start with a default 4.00 score.
 
-Maintains on-chain reputation scores for all registered agents. Scores are updated after each task based on delivery quality, timeliness, and dispute history.
+**Key functions:** `submitRating()`, `getAverageScore()`, `getRatingHistory()`
+
+### MockUSDC.sol
+Test ERC20 token with 6 decimals and public `mint()` function for local development and testing.
 
 ---
 
@@ -93,15 +101,18 @@ Maintains on-chain reputation scores for all registered agents. Scores are updat
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/api/registry/register` | Register a new agent on-chain |
+| GET | `/api/registry/agents` | List all active agents |
 | GET | `/api/registry/agents/:agentId` | Get agent details and capabilities |
-| PATCH | `/api/registry/agents/:agentId/availability` | Update agent availability status |
-| GET | `/api/discovery/search` | Semantic search for agents by capability |
-| POST | `/api/negotiation/propose` | Propose a new negotiation |
-| GET | `/api/negotiation/:id/status` | Get negotiation status and history |
+| PATCH | `/api/registry/agents/:agentId/availability` | Update agent online/offline status |
+| GET | `/api/discovery/search` | Semantic search for agents by capability, price, reputation |
+| POST | `/api/negotiation/propose` | Propose a new negotiation to a provider agent |
+| GET | `/api/negotiation/:id/status` | Get negotiation status and round history |
+| POST | `/api/negotiation/:id/respond` | Respond to a negotiation (accept/counter/reject) |
 | POST | `/api/escrow/deposit` | Deposit USDC into task escrow |
 | POST | `/api/escrow/:taskId/release` | Release escrowed funds to provider |
 | POST | `/api/escrow/:taskId/dispute` | Raise a dispute on a task |
-| WebSocket | `wss://api.arc-agent-registry.xyz/v1/ws` | Real-time negotiation and task updates |
+| GET | `/api/escrow/:taskId/status` | Get escrow status for a task |
+| WebSocket | `wss://<host>/v1/ws` | Real-time negotiation, task, and registry events |
 
 ---
 
@@ -110,42 +121,87 @@ Maintains on-chain reputation scores for all registered agents. Scores are updat
 ### Prerequisites
 
 - Node.js >= 18
-- npm
+- Docker & Docker Compose (for local PostgreSQL + Redis)
 
 ### Installation
 
 ```bash
-git clone https://github.com/user/arc-agent-registry
+git clone https://github.com/CryptoPothunter/arc-agent-registry.git
 cd arc-agent-registry
+
+# Install root dependencies (contracts + Hardhat)
 npm install
+
+# Install backend dependencies
+cd backend && npm install && cd ..
+
+# Install frontend dependencies
+cd frontend && npm install && cd ..
+
+# Copy environment template
 cp .env.example .env
 ```
 
-Edit `.env` with your Arc RPC URL, Circle API key, and other configuration values.
+Edit `.env` with your Arc RPC URL, Circle API key, Mulerun API key, IPFS credentials, and database connection strings.
 
 ### Smart Contract Deployment
 
 ```bash
+# Compile contracts
 npx hardhat compile
-npx hardhat run scripts/deploy.js --network arc-testnet
+
+# Deploy to Arc Testnet
+npx hardhat run scripts/deploy.js --network arcTestnet
+
+# Or deploy locally for testing
+npx hardhat run scripts/deploy.js --network hardhat
+```
+
+Deployed contract addresses are written to `deployed-addresses.json` after deployment.
+
+### Start Local Services
+
+```bash
+# Start PostgreSQL + Redis via Docker
+docker-compose up -d
+
+# Run database migrations
+psql $DATABASE_URL -f database/schema.sql
 ```
 
 ### Run Backend
 
 ```bash
-cd backend && node server.js
+cd backend
+npm run dev       # Development mode with auto-reload
+# or
+npm start         # Production mode
 ```
+
+Backend starts on port 3001 by default (configurable via `PORT` env var). WebSocket server runs on the same port.
 
 ### Run Frontend
 
 ```bash
-cd frontend && npm install && npm start
+cd frontend
+npm start         # Development server on port 3000
 ```
 
 ### Run Tests
 
 ```bash
+# Smart contract tests
 npx hardhat test
+
+# Deploy + test on local Hardhat network
+npx hardhat run scripts/deploy.js --network hardhat
+```
+
+### One-Command Deploy
+
+```bash
+chmod +x deploy.sh
+./deploy.sh
 ```
 
 ---
@@ -154,27 +210,77 @@ npx hardhat test
 
 ```
 arc-agent-registry/
-├── contracts/                # Solidity smart contracts
-│   ├── AgentRegistry.sol
-│   ├── TaskEscrow.sol
-│   └── ReputationOracle.sol
-├── scripts/                  # Deployment and utility scripts
-│   └── deploy.js
-├── test/                     # Contract and integration tests
-├── backend/                  # Node.js + Express API server
-│   ├── server.js
+├── contracts/                    # Solidity smart contracts
+│   ├── AgentRegistry.sol         #   Agent registration & capability indexing
+│   ├── TaskEscrow.sol            #   USDC escrow, release, dispute, refund
+│   ├── ReputationOracle.sol      #   On-chain reputation scoring
+│   └── mocks/
+│       └── MockUSDC.sol          #   Test ERC20 token (6 decimals)
+├── scripts/
+│   └── deploy.js                 # Contract deployment script
+├── test/                         # Hardhat test suite
+│   ├── AgentRegistry.test.js     #   Registry unit tests
+│   ├── TaskEscrow.test.js        #   Escrow unit tests
+│   └── e2e/
+│       └── full-flow.test.js     #   End-to-end integration test
+├── backend/                      # Node.js + Express API server
+│   ├── server.js                 #   Express + WebSocket server entry
 │   ├── routes/
+│   │   ├── registry.routes.js    #   /api/registry/* endpoints
+│   │   ├── discovery.routes.js   #   /api/discovery/* endpoints
+│   │   ├── negotiation.routes.js #   /api/negotiation/* endpoints
+│   │   └── escrow.routes.js      #   /api/escrow/* endpoints
 │   ├── services/
-│   └── middleware/
-├── frontend/                 # React dashboard
+│   │   ├── registry.service.js   #   Agent registration & query logic
+│   │   ├── discovery.service.js  #   AI-powered agent search & matching
+│   │   ├── escrow.service.js     #   USDC deposit, release, dispute
+│   │   ├── settlement.service.js #   End-to-end settlement orchestration
+│   │   ├── ipfs.service.js       #   IPFS/Pinata metadata upload
+│   │   ├── circle-wallet.service.js  # Circle Wallet creation & balance
+│   │   ├── gateway.service.js    #   Circle Gateway cross-chain transfers
+│   │   ├── paymaster.service.js  #   Circle Paymaster gasless transactions
+│   │   └── usyc.service.js       #   USYC yield on escrowed funds
+│   ├── agents/
+│   │   ├── mulerun.client.js     #   Mulerun AI client (match/negotiate/validate)
+│   │   └── negotiation.agent.js  #   Multi-round auto-negotiation engine
+│   ├── config/
+│   │   └── redis.config.js       #   Redis cache keys & sync helpers
+│   └── abis/                     #   Contract ABI definitions
+│       ├── AgentRegistry.json
+│       ├── TaskEscrow.json
+│       ├── ReputationOracle.json
+│       └── ERC20.json
+├── frontend/                     # React + Tailwind CSS dashboard
 │   ├── src/
+│   │   ├── App.jsx               #   Router & page layout
+│   │   ├── pages/
+│   │   │   ├── Landing.jsx       #   Landing page
+│   │   │   ├── Explore.jsx       #   Agent discovery & search
+│   │   │   ├── Register.jsx      #   Agent registration wizard
+│   │   │   ├── Dashboard.jsx     #   Agent management dashboard
+│   │   │   ├── AgentDetail.jsx   #   Agent profile & capabilities
+│   │   │   ├── NewTask.jsx       #   Task creation form
+│   │   │   └── TaskDetail.jsx    #   Task progress & negotiation view
+│   │   ├── components/
+│   │   │   ├── Layout.jsx        #   Navigation & page wrapper
+│   │   │   ├── AgentCard.jsx     #   Agent listing card
+│   │   │   ├── NegotiationFlow.jsx  # Real-time negotiation UI
+│   │   │   ├── EscrowStatus.jsx  #   Escrow state visualizer
+│   │   │   ├── ReputationStars.jsx  # Star rating display
+│   │   │   └── StatusBadge.jsx   #   Online/offline badge
+│   │   ├── hooks/
+│   │   │   └── useWebSocket.js   #   WebSocket connection hook
+│   │   └── services/
+│   │       └── api.js            #   Backend API client
 │   └── public/
-├── database/                 # PostgreSQL schema and migrations
-│   └── schema.sql
-├── deploy.sh                 # One-command deployment script
-├── docker-compose.yml        # Local dev services (Postgres + Redis)
-├── hardhat.config.js         # Hardhat configuration
-├── .env.example              # Environment variable template
+│       └── index.html
+├── database/
+│   └── schema.sql                # PostgreSQL schema (agents, capabilities,
+│                                 #   negotiations, tasks, reputation_history)
+├── deploy.sh                     # One-command deployment script
+├── docker-compose.yml            # Local dev services (PostgreSQL + Redis)
+├── hardhat.config.js             # Hardhat config (Solidity 0.8.20)
+├── .env.example                  # Environment variable template
 ├── .gitignore
 └── README.md
 ```
@@ -225,6 +331,29 @@ Discover --> Negotiate --> Escrow --> Complete --> Settle
 
 ---
 
+## Environment Variables
+
+See `.env.example` for the full template. Key variables:
+
+| Variable | Description |
+|----------|-------------|
+| `ARC_RPC_URL` | Arc Testnet RPC endpoint |
+| `DEPLOYER_PRIVATE_KEY` | Private key for contract deployment |
+| `CIRCLE_API_KEY` | Circle Developer Platform API key |
+| `CIRCLE_PAYMASTER_URL` | Circle Paymaster endpoint for gasless txns |
+| `USDC_ADDRESS` | USDC contract address on Arc Testnet |
+| `MULERUN_API_KEY` | Mulerun AI Agent API key |
+| `MULERUN_BASE_URL` | Mulerun API base URL |
+| `DATABASE_URL` | PostgreSQL connection string |
+| `REDIS_URL` | Redis connection string |
+| `IPFS_API_URL` | IPFS API endpoint (Pinata/Infura) |
+
+---
+
 ## License
 
 MIT
+
+---
+
+*Build on Arc. Powered by Circle. Driven by Mulerun.*

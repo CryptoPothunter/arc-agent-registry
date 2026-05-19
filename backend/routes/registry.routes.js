@@ -14,7 +14,7 @@ const registry = new RegistryService();
  */
 router.post('/register', async (req, res, next) => {
   try {
-    const { metadata, walletAddress } = req.body;
+    const { metadata, walletAddress, signature } = req.body;
 
     if (!metadata) {
       return res.status(400).json({ error: 'metadata is required' });
@@ -23,7 +23,7 @@ router.post('/register', async (req, res, next) => {
       return res.status(400).json({ error: 'walletAddress is required' });
     }
 
-    const agent = await registry.registerAgent({ metadata, walletAddress });
+    const agent = await registry.registerAgent({ metadata, walletAddress, signature });
 
     // Notify via WebSocket if available
     if (req.app.locals.wsNotify) {

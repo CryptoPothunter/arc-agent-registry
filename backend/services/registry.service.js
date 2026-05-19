@@ -66,10 +66,22 @@ class RegistryService {
 
     if (this.contract && this.signer) {
       // On-chain registration
+      // Convert capabilities to bytes32 hashes
+      const capabilityHashes = metadata.capabilities.map((cap) =>
+        ethers.keccak256(ethers.toUtf8Bytes(cap))
+      );
+      const basePriceUsdc = ethers.parseUnits(
+        String(metadata.pricePerTask || 0),
+        6
+      );
+      const startActive = true;
+
       const tx = await this.contract.register(
-        metadataURI,
         walletAddress,
-        metadata.capabilities
+        metadataURI,
+        capabilityHashes,
+        basePriceUsdc,
+        startActive
       );
       const receipt = await tx.wait();
 
@@ -128,7 +140,7 @@ class RegistryService {
    */
   async updateAvailability(agentId, available) {
     if (this.contract && this.signer) {
-      const tx = await this.contract.setAvailability(agentId, available);
+      const tx = await this.contract.setAvailability(available);
       const receipt = await tx.wait();
       await syncOnChainEvent('AvailabilityChanged', { agentId, available });
       return { agentId, available, txHash: receipt.hash };
@@ -156,20 +168,21 @@ class RegistryService {
       const raw = await this.contract.getAgent(agentId);
       let metadata = {};
       try {
-        metadata = await fetchFromIPFS(raw.metadataURI);
+        metadata = await fetchFromIPFS(raw.metadataCID);
       } catch (err) {
         console.warn(`[Registry] Failed to fetch IPFS metadata for agent ${agentId}:`, err.message);
       }
 
       const agentData = {
-        agentId: raw.id.toString(),
-        owner: raw.owner,
-        metadataURI: raw.metadataURI,
+        agentId: raw.agentId.toString(),
+        owner: raw.wallet,
+        metadataURI: raw.metadataCID,
         walletAddress: raw.wallet,
-        capabilities: Array.from(raw.capabilities),
+        capabilities: Array.from(raw.capabilityHashes),
         reputationScore: Number(raw.reputationScore),
-        available: raw.available,
-        registeredAt: new Date(Number(raw.registeredAt) * 1000).toISOString(),
+        available: raw.isActive,
+        basePriceUsdc: ethers.formatUnits(raw.basePriceUsdc, 6),
+        taskCount: Number(raw.taskCount),
         metadata,
       };
 
@@ -197,7 +210,19 @@ class RegistryService {
         );
         return agents.filter((a) => a && a.available);
       }
-      return [];
+
+      // Read active agent IDs directly from the contract's activeAgentIds array
+      const agents = [];
+      try {
+        for (let i = 0; ; i++) {
+          const agentId = await this.contract.activeAgentIds(i);
+          const agent = await this.getAgentInfo(agentId.toString()).catch(() => null);
+          if (agent) agents.push(agent);
+        }
+      } catch {
+        // Array index out of bounds signals end of array
+      }
+      return agents;
     }
 
     // Dev fallback

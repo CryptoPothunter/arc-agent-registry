@@ -14,10 +14,10 @@ const escrow = new EscrowService();
  */
 router.post('/deposit', async (req, res, next) => {
   try {
-    const { provider, amount, deadline, clientAddress } = req.body;
+    const { taskId, negotiationId, amount, deadline, providerAddress, agreementHash, signature } = req.body;
 
-    if (!provider) {
-      return res.status(400).json({ error: 'provider address is required' });
+    if (!providerAddress) {
+      return res.status(400).json({ error: 'providerAddress is required' });
     }
     if (!amount || isNaN(Number(amount))) {
       return res.status(400).json({ error: 'amount is required and must be a valid number' });
@@ -27,15 +27,19 @@ router.post('/deposit', async (req, res, next) => {
     }
 
     const result = await escrow.depositFunds({
-      provider,
+      provider: providerAddress,
       amount: String(amount),
       deadline,
-      clientAddress,
+      clientAddress: req.body.clientAddress,
+      taskId,
+      negotiationId,
+      agreementHash,
+      signature,
     });
 
     // Notify via WebSocket
     if (req.app.locals.wsNotify) {
-      req.app.locals.wsNotify(`agent:${provider}:negotiation`, {
+      req.app.locals.wsNotify(`agent:${providerAddress}:negotiation`, {
         event: 'escrow_deposited',
         taskId: result.taskId,
         amount: result.amount,
@@ -55,7 +59,8 @@ router.post('/deposit', async (req, res, next) => {
 router.post('/:taskId/release', async (req, res, next) => {
   try {
     const { taskId } = req.params;
-    const result = await escrow.releaseFunds(taskId);
+    const { rating, feedback, signature } = req.body;
+    const result = await escrow.releaseFunds(taskId, { rating, feedback, signature });
     res.json({ success: true, ...result });
   } catch (err) {
     if (err.message.includes('not found')) {
@@ -75,13 +80,13 @@ router.post('/:taskId/release', async (req, res, next) => {
 router.post('/:taskId/dispute', async (req, res, next) => {
   try {
     const { taskId } = req.params;
-    const { reason } = req.body;
+    const { reason, signature } = req.body;
 
     if (!reason) {
       return res.status(400).json({ error: 'reason is required' });
     }
 
-    const result = await escrow.raiseDispute(taskId, reason);
+    const result = await escrow.raiseDispute(taskId, reason, signature);
     res.json({ success: true, ...result });
   } catch (err) {
     if (err.message.includes('not found')) {
