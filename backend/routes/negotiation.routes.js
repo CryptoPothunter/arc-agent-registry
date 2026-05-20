@@ -97,12 +97,24 @@ router.get('/:negotiationId/status', async (req, res, next) => {
 
     res.json({
       success: true,
-      negotiationId: negotiation.negotiationId,
-      status: negotiation.status,
-      agreedPrice: negotiation.agreedPrice || null,
-      agreedDeadline: negotiation.deadline ? new Date(negotiation.deadline * 1000).toISOString() : null,
-      agreementHash: negotiation.agreementHash || null,
-      rounds: negotiation.round,
+      negotiation: {
+        negotiationId: negotiation.negotiationId,
+        status: negotiation.status,
+        requesterId: negotiation.requesterId,
+        providerId: negotiation.providerId,
+        toAgentId: negotiation.providerId,
+        capability: negotiation.capability,
+        offeredPrice: negotiation.offeredPrice,
+        proposedPrice: negotiation.offeredPrice,
+        agreedPrice: negotiation.agreedPrice || null,
+        agreedDeadline: negotiation.deadline ? new Date(negotiation.deadline * 1000).toISOString() : null,
+        agreementHash: negotiation.agreementHash || null,
+        history: negotiation.history || [],
+        rounds: negotiation.round,
+        maxRounds: negotiation.maxRounds,
+        createdAt: negotiation.createdAt,
+        expiresAt: negotiation.expiresAt,
+      },
     });
   } catch (err) {
     if (err.message.includes('not found')) {
