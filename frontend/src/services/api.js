@@ -11,7 +11,7 @@ async function request(path, options = {}) {
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({ message: res.statusText }));
-    throw new Error(error.message || 'API request failed');
+    throw new Error(error.message || error.error || 'API request failed');
   }
   return res.json();
 }
@@ -61,6 +61,16 @@ export const disputeEscrow = (taskId, data) =>
 
 export const getEscrowStatus = (taskId) => request(`/escrow/${taskId}/status`);
 
+// Settlement
+export const settleTask = (data) =>
+  request('/settlement/settle', { method: 'POST', body: JSON.stringify(data) });
+
+export const getSettlementStatus = (taskId) =>
+  request(`/settlement/${taskId}/status`);
+
+// Health check
+export const getHealthStatus = () => request('/health');
+
 export default {
   registerAgent,
   getAgents,
@@ -74,4 +84,7 @@ export default {
   releaseEscrow,
   disputeEscrow,
   getEscrowStatus,
+  settleTask,
+  getSettlementStatus,
+  getHealthStatus,
 };
