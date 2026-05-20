@@ -2,17 +2,18 @@
  * PaymasterService - Circle Paymaster integration for gasless transactions.
  * Sponsors gas fees for agent operations using Circle's Paymaster API,
  * enabling gasless UX via ERC-4337 UserOperations.
+ * On Arc Testnet, gas is paid in USDC.
  */
 
 const { ethers } = require('ethers');
-const fetch = require('node-fetch');
 
-// Circle Paymaster configuration
+// Circle Paymaster configuration for Arc Testnet
 const CIRCLE_API_KEY = process.env.CIRCLE_API_KEY || '';
-const CIRCLE_PAYMASTER_URL = process.env.CIRCLE_PAYMASTER_URL || 'https://api.circle.com/v1/paymaster';
+const CIRCLE_PAYMASTER_URL = process.env.CIRCLE_PAYMASTER_URL || 'https://paymaster.arc.network';
 const ENTRYPOINT_ADDRESS = process.env.ENTRYPOINT_ADDRESS || '0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789';
 const RPC_URL = process.env.RPC_URL || 'https://rpc.testnet.arc.network';
 const PAYMASTER_PRIVATE_KEY = process.env.PAYMASTER_PRIVATE_KEY || '';
+const USDC_ADDRESS = process.env.USDC_ADDRESS || '0x3600000000000000000000000000000000000000';
 
 class PaymasterService {
   constructor() {
@@ -196,15 +197,19 @@ class PaymasterService {
     if (!this.signer) {
       console.warn('[Paymaster] No private key configured, returning mock sponsorship');
       return {
-        sponsored: true,
+        sponsored: false,
         mock: true,
         sender,
         target,
-        message: 'Transaction would be sponsored in production',
+        message: 'Paymaster not configured. Set PAYMASTER_PRIVATE_KEY to enable gas sponsorship.',
       };
     }
 
     try {
+      // On Arc Testnet, gas is paid in USDC
+      // The paymaster wallet directly relays the transaction and pays gas in USDC
+      console.log(`[Paymaster] Sponsoring transaction via fallback relay (Arc Testnet USDC gas)`);
+
       const tx = await this.signer.sendTransaction({
         to: target,
         data: calldata,
@@ -212,14 +217,17 @@ class PaymasterService {
       });
 
       const receipt = await tx.wait();
+      const gasUsedUSDC = ethers.formatUnits(receipt.gasUsed * receipt.gasPrice, 6);
 
       return {
         sponsored: true,
         fallback: true,
         txHash: receipt.hash,
         gasUsed: receipt.gasUsed.toString(),
+        gasCostUSDC: gasUsedUSDC,
         sender,
         target,
+        explorerUrl: `https://testnet.arcscan.app/tx/${receipt.hash}`,
       };
     } catch (error) {
       throw new Error(`Paymaster fallback sponsorship failed: ${error.message}`);
