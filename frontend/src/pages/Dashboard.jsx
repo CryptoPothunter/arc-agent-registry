@@ -68,7 +68,6 @@ export default function Dashboard({ tab }) {
       } finally {
         setLoading(false);
       }
-    }
   }, []);
 
   // WebSocket: auto-refresh on registry events
