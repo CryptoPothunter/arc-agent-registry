@@ -524,9 +524,19 @@ Discover --> Negotiate --> Escrow --> Complete --> Settle
 | Component | Role |
 |-----------|------|
 | **Wallets** | Agent custody wallets with on-chain USDC/EURC balance queries on Arc Testnet. Local wallet generation in dev mode. |
-| **Gateway** | Cross-chain USDC transfers via CCTP (Circle Cross-Chain Transfer Protocol). Supports Arc Testnet, ETH Sepolia, AVAX Fuji, ARB Sepolia. |
+| **Gateway** | Cross-chain USDC transfers via CCTP V2 (Circle Cross-Chain Transfer Protocol). Arc Testnet domain 26. Supports ETH Sepolia, AVAX Fuji, ARB Sepolia. |
 | **Paymaster** | USDC-based gas sponsorship on Arc Testnet. Fallback relay when Circle API is unavailable. |
 | **USYC** | Yield generation on escrowed funds via Teller contract. Preview deposit/redeem with slippage protection. |
+
+### CCTP V2 Contracts (Arc Testnet - Domain 26)
+
+| Contract | Address |
+|----------|---------|
+| TokenMessengerV2 | `0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA` |
+| MessageTransmitterV2 | `0xE737e5cEBEEBa77EFE34D4aa090756590b1CE275` |
+| TokenMinterV2 | `0xb43db544E2c27092c107639Ad201b3dEfAbcF192` |
+| GatewayWallet | `0x0077777d7EBA4688BDeF3E311b846F25870A19B9` |
+| GatewayMinter | `0x0022222ABE238Cc2C7Bb1f21003F0a260052475B` |
 
 ---
 
@@ -558,6 +568,8 @@ See `.env.example` for the full template. Key variables:
 | `USDC_ADDRESS` | USDC contract on Arc Testnet (`0x360...`) |
 | `USYC_CONTRACT` | USYC contract address |
 | `TELLER_ADDRESS` | Teller contract for USYC deposits |
+| `CCTP_TOKEN_MESSENGER` | CCTP V2 TokenMessenger on Arc Testnet |
+| `CCTP_MESSAGE_TRANSMITTER` | CCTP V2 MessageTransmitter on Arc Testnet |
 | `CIRCLE_API_KEY` | Circle Developer Platform API key |
 | `CIRCLE_PAYMASTER_URL` | Circle Paymaster endpoint |
 | `DEEPSEEK_API_KEY` | DeepSeek V4 API key (AI backend) |
@@ -581,26 +593,31 @@ See `.env.example` for the full template. Key variables:
 - [x] All contracts deployed and verified on Arc Testnet (Chain ID 5042002)
 - [x] Trust relationships established between contracts
 
-**Backend (12 route modules, 16 services, 6 AI agents):**
+**Backend (12 route modules, 16 services, 8 AI agents):**
 - [x] Core routes: registry, discovery, negotiation, escrow, settlement
 - [x] Extended routes: fund, pipeline, market-data, private-intent, agent-intelligence, traction-stats, faucet
 - [x] Core services: registry, discovery, escrow, settlement, reputation, IPFS
-- [x] Circle services: wallet, gateway (CCTP), paymaster, USYC yield
+- [x] Circle services: wallet, gateway (CCTP V2, domain 26), paymaster, USYC yield
 - [x] Extended services: dynamic-pricing, nanopayment-betting, yielding-escrow, identity-passport, arc-native-identity, private-intent
-- [x] AI agents: mulerun client, negotiation, real-negotiation, autonomous-pricing, market-maker, orchestrator
+- [x] AI agents: mulerun client, negotiation, real-negotiation (Bayesian), autonomous-pricing, market-maker (Kelly), orchestrator (DAG)
+- [x] Pipeline decompose endpoint connected to OrchestratorAgent (DeepSeek AI with fallback)
+- [x] Private intent matching connected to DiscoveryService (real agent registry lookup)
+- [x] Negotiation status endpoint returns full history array for frontend compatibility
 - [x] Chain event listener with WebSocket reconnection
 - [x] EIP-191/EIP-712 signature verification middleware
 - [x] Redis caching with in-memory fallback
 - [x] WebSocket real-time events with topic subscriptions
 
-**Frontend (7 pages, 6 components):**
+**Frontend (7 pages, 6 components, 30+ API functions):**
 - [x] All pages connected to backend API with loading/error states
 - [x] WebSocket integration for real-time updates
 - [x] Agent registration wizard (4-step)
 - [x] Agent discovery with filters
-- [x] Negotiation flow with counter-offers
+- [x] Negotiation flow with counter-offers and provider address resolution
 - [x] Escrow status visualization
 - [x] Dashboard with stats, tasks, and earnings tabs
+- [x] API client covers all 30+ backend endpoints (fund, pipeline, market, intent, AI, stats, faucet)
+- [x] Footer resource links point to GitHub repository
 
 **Tests (216 passing):**
 - [x] AgentRegistry — 21 tests (registration, search, reputation, access control)
@@ -611,6 +628,17 @@ See `.env.example` for the full template. Key variables:
 - [x] AgentPipeline — 47 tests (DAG, nodes, dependencies, recovery)
 - [x] Backend services — 29 tests (settlement, discovery, negotiation)
 - [x] E2E full flow — 3 tests (register → deposit → release → reputation)
+
+**Database (PostgreSQL schema - 11 tables):**
+- [x] Core tables: agents, capabilities, negotiations, tasks, reputation_history
+- [x] v2.0 tables: prediction_markets, market_bets, agent_funds, fund_investments, pipelines, pipeline_nodes, private_intents, ai_decisions
+
+**Infrastructure:**
+- [x] Docker Compose (PostgreSQL 16 + Redis 7)
+- [x] One-command deploy script (contracts + backend + frontend + platform)
+- [x] Deploy script updates all 6 contract addresses in .env
+- [x] CCTP V2 contract addresses configured (domain 26)
+- [x] On-chain contracts verified (Agent #1 registered, all contracts responding)
 
 ## Test Results (216 passing)
 
