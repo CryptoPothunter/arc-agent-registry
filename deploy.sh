@@ -74,12 +74,18 @@ else
     REGISTRY_ADDR=$(node -e "console.log(require('./deployed-addresses.json').contracts.AgentRegistry)")
     ESCROW_ADDR=$(node -e "console.log(require('./deployed-addresses.json').contracts.TaskEscrow)")
     REPUTATION_ADDR=$(node -e "console.log(require('./deployed-addresses.json').contracts.ReputationOracle)")
+    MARKET_ADDR=$(node -e "console.log(require('./deployed-addresses.json').contracts.AgentReputationMarket)")
+    PIPELINE_ADDR=$(node -e "console.log(require('./deployed-addresses.json').contracts.AgentPipeline)")
+    FUND_ADDR=$(node -e "console.log(require('./deployed-addresses.json').contracts.AgentFund)")
 
     sed -i "s|^REGISTRY_CONTRACT=.*|REGISTRY_CONTRACT=$REGISTRY_ADDR|" .env
     sed -i "s|^ESCROW_CONTRACT=.*|ESCROW_CONTRACT=$ESCROW_ADDR|" .env
     sed -i "s|^REPUTATION_CONTRACT=.*|REPUTATION_CONTRACT=$REPUTATION_ADDR|" .env
+    sed -i "s|^REPUTATION_MARKET_CONTRACT=.*|REPUTATION_MARKET_CONTRACT=$MARKET_ADDR|" .env
+    sed -i "s|^PIPELINE_CONTRACT=.*|PIPELINE_CONTRACT=$PIPELINE_ADDR|" .env
+    sed -i "s|^AGENT_FUND_CONTRACT=.*|AGENT_FUND_CONTRACT=$FUND_ADDR|" .env
 
-    echo "[+] Contract addresses updated in .env"
+    echo "[+] All 6 contract addresses updated in .env"
   fi
 fi
 
