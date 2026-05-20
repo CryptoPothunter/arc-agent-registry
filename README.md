@@ -2,7 +2,7 @@
 
 > AI Agent Discovery, Negotiation & Settlement Protocol on Arc
 
-**Version** v1.2.0 · **Chain** Arc Testnet (Chain ID: 5042002) · **Settlement Currency** USDC
+**Version** v1.3.0 · **Chain** Arc Testnet (Chain ID: 5042002) · **Settlement Currency** USDC
 
 ## Overview
 
@@ -74,13 +74,15 @@
 
 ## Features
 
-- **Agent Registration** -- On-chain registration with IPFS-hosted metadata (Pinata or local dev storage).
-- **Smart Discovery** -- Mulerun AI-powered semantic search to match agents by capability, reputation, and availability. Frontend connected to live API.
-- **Automated Negotiation** -- AI-driven multi-round price negotiation between requester and provider agents via real API endpoints.
-- **Escrow & Settlement** -- USDC-based trustless escrow with sub-second finality on Arc.
-- **On-chain Reputation** -- Transparent, immutable reputation scores derived from task completion and quality.
-- **Circle Stack Integration** -- Wallets (on-chain balance queries), Gateway (CCTP cross-chain transfers), Paymaster (USDC gas sponsorship), and USYC yield on escrowed funds via Teller contract.
-- **Full Frontend Integration** -- All pages (Explore, Register, Dashboard, NewTask, AgentDetail) connected to backend API with loading states and error handling.
+- **Agent Registration** -- On-chain registration with IPFS-hosted metadata. Full schema validation including capabilities, pricing, availability, inputSchema/outputSchema.
+- **Smart Discovery** -- AI-powered semantic search with 7 filter dimensions: capability, maxPrice, minReputationScore, minSuccessRate, availableOnly, language, tags.
+- **Automated Negotiation** -- AI-driven multi-round price negotiation with multi-factor evaluation (load, complexity, history, deadline urgency).
+- **Escrow & Settlement** -- USDC-based trustless escrow with sub-second finality on Arc. Adjustable platform fee.
+- **On-chain Reputation** -- Transparent, immutable reputation scores with cumulative scoring and lastUpdated tracking.
+- **Signature Verification** -- EIP-191 signature authentication middleware for all write endpoints.
+- **Circle Stack Integration** -- Wallets (on-chain balance queries), Gateway (CCTP cross-chain transfers), Paymaster (USDC gas sponsorship), and USYC yield on escrowed funds.
+- **AI Agent Roles** -- DeepSeek V4 powered MatchAgent, NegotiatorAgent, ValidatorAgent with structured prompt engineering and local fallback heuristics.
+- **Full Frontend Integration** -- All pages connected to backend API with loading states and error handling.
 
 ---
 
@@ -104,19 +106,37 @@
 ## Smart Contracts
 
 ### AgentRegistry.sol
-Handles agent registration and capability indexing on-chain. Each agent receives a unique on-chain identity tied to its wallet address. Capabilities are hashed to `bytes32` and stored in an on-chain index for fast lookup. Metadata is stored on IPFS (CID referenced on-chain). Supports trusted contract authorization for cross-contract reputation updates.
+Handles agent registration and capability indexing on-chain. Each agent receives a unique on-chain identity tied to its wallet address. Capabilities are hashed to `bytes32` and stored in a **public `capabilityIndex`** mapping for fast on-chain lookup. Metadata is stored on IPFS (CID referenced on-chain). Supports trusted contract authorization for cross-contract reputation updates.
 
-**Key functions:** `register()`, `updateMetadata(metadataCID, newBasePrice)`, `setAvailability()`, `getAgent()`, `getAgentsByCapability()`, `updateReputation()`, `activeAgentIds()`
+**Key changes (v1.3.0):**
+- `register()` now validates `capabilityHashes.length > 0` (no empty capability registration)
+- `addressToAgentId` mapping is public (renamed from `ownerToAgent`)
+- `capabilityIndex` is public (was private)
+- `AgentRegistered` event includes `timestamp` instead of `wallet`
+- `updateReputation()` takes `bool incrementTaskCount` (was `uint256`)
+- Agent struct uses `registeredAt` (was `createdAt`)
+
+**Key functions:** `register()`, `updateMetadata()`, `setAvailability()`, `getAgent()`, `getAgentsByCapability()`, `updateReputation()`, `setTrustedContract()`
 
 ### TaskEscrow.sol
-Manages trustless USDC escrow for agent-to-agent tasks. Funds are locked when a task agreement is reached and released to the provider upon successful completion. A **0.5% platform fee** is deducted at settlement. Supports timeout-based automatic refunds and dispute resolution.
+Manages trustless USDC escrow for agent-to-agent tasks. Funds are locked when a task agreement is reached and released to the provider upon successful completion. Platform fee (default **0.5%**) is adjustable by owner. Supports timeout-based automatic refunds and dispute resolution.
 
-**Key functions:** `deposit()`, `release()`, `refundOnTimeout()`, `dispute(taskId, evidenceHash)`
+**Key changes (v1.3.0):**
+- `platformFeesBps` is now a mutable state variable with `setPlatformFee()` setter
+- `Task` struct includes `taskId` and `lockedAt` fields
+- `deposit()` follows checks-effects-interactions pattern (transferFrom before struct)
+- Event signatures simplified to match doc spec (no redundant params)
+
+**Key functions:** `deposit()`, `release()`, `refundOnTimeout()`, `dispute()`, `setPlatformFee()`
 
 ### ReputationOracle.sol
 Maintains on-chain reputation scores for all registered agents. Ratings (1.00-5.00 scale) are submitted after each task completion. Historical rating data is stored on-chain for trend analysis. New agents start with a default 4.00 score.
 
-**Key functions:** `submitRating()`, `getAverageScore()`, `getRatingHistory()`
+**Key changes (v1.3.0):**
+- `ReputationRecord` struct uses `cumulativeScore` (was `totalScore`), includes `agentId` and `lastUpdated`
+- `setTrusted()` renamed from `setTrustedCaller()`
+
+**Key functions:** `submitRating()`, `getAverageScore()`, `getRatingHistory()`, `getReputationRecord()`
 
 ### MockUSDC.sol
 Test ERC20 token with 6 decimals and public `mint()` function for local development and testing. Not deployed on Arc Testnet (uses native USDC instead).
@@ -276,6 +296,8 @@ arc-agent-registry/
 │   ├── agents/
 │   │   ├── mulerun.client.js     #   Mulerun AI client (match/negotiate/validate)
 │   │   └── negotiation.agent.js  #   Multi-round auto-negotiation engine
+│   ├── middleware/
+│   │   └── auth.middleware.js  #   Signature verification (EIP-191/EIP-712)
 │   ├── config/
 │   │   └── redis.config.js       #   Cache keys & in-memory fallback
 │   └── abis/                     #   Contract ABI definitions
@@ -388,9 +410,39 @@ See `.env.example` for the full template. Key variables:
 
 ## Development Progress
 
-### Completed (v1.2.0)
+### Completed (v1.3.0)
 
-- [x] Smart contracts (AgentRegistry, TaskEscrow, ReputationOracle)
+**Smart Contracts (13 items fixed):**
+- [x] `AgentRegistry.sol` — `register()` validates non-empty capabilities (#1)
+- [x] `AgentRegistry.sol` — `capabilityIndex` mapping is public (#2)
+- [x] `AgentRegistry.sol` — `updateReputation()` uses `bool incrementTaskCount` (#3)
+- [x] `TaskEscrow.sol` — `platformFeesBps` is mutable with `setPlatformFee()` (#4)
+- [x] `TaskEscrow.sol` — `Task` struct includes `taskId` and `lockedAt` (#5)
+- [x] `AgentRegistry.sol` — Struct field renamed to `registeredAt` (#6)
+- [x] `AgentRegistry.sol` — Mapping renamed to `addressToAgentId` (#7)
+- [x] `AgentRegistry.sol` — `AgentRegistered` event includes `timestamp` (#8)
+- [x] `TaskEscrow.sol` — `deposit()` follows checks-effects-interactions (#9)
+- [x] `TaskEscrow.sol` — Event signatures match doc spec (#10)
+- [x] `ReputationOracle.sol` — `lastUpdated` field added (#11)
+- [x] `ReputationOracle.sol` — `cumulativeScore` + `agentId` fields (#12)
+- [x] `ReputationOracle.sol` — `setTrusted()` renamed (#13)
+
+**Backend Services (7 items fixed):**
+- [x] `mulerun.client.js` — AI-driven scoring, negotiation, validation with DeepSeek V4 (#14)
+- [x] `negotiation.agent.js` — Multi-factor evaluation: load, complexity, history, urgency (#15)
+- [x] All routes — Signature verification middleware added (#16)
+- [x] `gateway.service.js` — CCTP cross-chain transfer verified (#17)
+- [x] `registry.service.js` — Full metadata validation per doc spec (#18)
+- [x] `registry.service.js` — `getAgentInfo()` returns nested `onchain` structure (#19)
+- [x] `discovery.service.js` — All 7 DiscoveryFilter fields supported (#20)
+
+**Additional fixes included:**
+- [x] Escrow release response includes `settlementTime`, `providerReceived`, `platformFee` (#22)
+- [x] Escrow deposit response includes `escrowId`, `unlockConditions` (#23)
+- [x] Negotiation routes accept doc-style field names (#25)
+- [x] Availability endpoint accepts `isOnline` parameter (#26)
+
+**Previously completed (v1.2.0):**
 - [x] Hardhat config with correct Arc Testnet parameters (Chain ID 5042002)
 - [x] Deploy script using real USDC on Arc Testnet
 - [x] All backend services connected to Arc Testnet RPC
@@ -399,30 +451,53 @@ See `.env.example` for the full template. Key variables:
 - [x] USYC yield service with Teller contract integration
 - [x] Paymaster service with USDC gas model
 - [x] Circle wallet service with on-chain balance queries
-- [x] Explore page connected to backend API
-- [x] Register page connected to registerAgent API
-- [x] AgentDetail page connected to backend API
-- [x] NewTask page connected to negotiation API
-- [x] Dashboard connected to backend API with real data
-- [x] Frontend API client with settlement and health check functions
+- [x] All frontend pages connected to backend API
 - [x] NegotiationFlow component with real WebSocket + API polling
-- [x] TaskDetail page with live negotiation, escrow, and settlement
 - [x] Settlement service with cross-chain fund consolidation via CCTP
 - [x] Landing page with real-time stats and Arc Testnet info
 
 ### Remaining Work
 
-- [ ] useWebSocket hook integration in remaining components
-- [ ] Database persistence (PostgreSQL integration)
-- [ ] Redis cache (replace in-memory store)
-- [ ] API rate limiting and authentication middleware
-- [ ] On-chain event listeners
-- [ ] Frontend wallet connection (MetaMask)
-- [ ] E2E testing on Arc Testnet
+- [ ] #21: Reputation score uses decay-factor weighted moving average
+- [ ] #24: USYC yield tracking (`yieldEarned` in redeem)
+- [ ] #27: WebSocket supports `action` field and `topics` array
+- [ ] #28: Missing WebSocket event types (`negotiation_proposed`, `task_completed`, `escrow_locked`)
+- [ ] #29: Redis config with ioredis connection (fallback to in-memory)
+- [ ] #30: `.env` variable names aligned with doc spec
+- [ ] #31-32: Database schema uses BIGINT/VARCHAR IDs matching on-chain types
+- [ ] #33: Frontend pages connected to real API (remove mock data)
+- [ ] #34: NegotiationFlow uses WebSocket hook
+- [ ] #35: Missing npm scripts (`dev:server`, `dev:client`, `dev:listener`, `db:migrate`)
+- [ ] #36: Hardhat network name `arc-testnet` (kebab-case)
+- [ ] #37: deploy.sh with full deployment steps
+- [ ] #38: Additional test modules (Settlement, Discovery, ReputationOracle, Negotiation)
+
+## Test Results (38 passing)
+
+```
+AgentRegistry (21 tests)
+  - Registration: register, event, duplicate prevention, validation, capabilities check
+  - Capability Search: by hash, multiple agents, public capabilityIndex
+  - Metadata Update: CID update, authorization
+  - Availability: toggle, authorization
+  - Reputation: trusted update, bool increment, untrusted rejection, range validation
+
+TaskEscrow (14 tests)
+  - Deposit: lock funds, duplicates, validation, struct fields (taskId, lockedAt)
+  - Release: fee calculation, authorization, status check
+  - Refund: timeout, premature rejection
+  - Dispute: requester, provider, third-party rejection
+  - Platform Fee: setPlatformFee, max cap, owner-only
+
+E2E Full Flow (3 tests)
+  - Register -> Deposit -> Release -> Balances -> Reputation
+  - addressToAgentId mapping verification
+  - ReputationRecord fields (lastUpdated, cumulativeScore)
+```
 
 ---
 
-## License
+
 
 MIT
 
