@@ -52,10 +52,13 @@ describe("TaskEscrow", function () {
         .withArgs(tid, requester.address, provider.address, depositAmount);
 
       const task = await taskEscrow.tasks(tid);
+      // #5: verify taskId and lockedAt fields exist
+      expect(task.taskId).to.equal(tid);
       expect(task.requester).to.equal(requester.address);
       expect(task.provider).to.equal(provider.address);
       expect(task.amount).to.equal(depositAmount);
       expect(task.status).to.equal(1); // Locked
+      expect(task.lockedAt).to.be.gt(0);
     });
 
     it("should reject duplicate task IDs", async function () {
@@ -64,21 +67,21 @@ describe("TaskEscrow", function () {
 
       await expect(
         taskEscrow.connect(requester).deposit(tid, depositAmount, provider.address, deadline, agreementHash)
-      ).to.be.revertedWith("TaskEscrow: task already exists");
+      ).to.be.revertedWith("Task exists");
     });
 
     it("should reject zero amount", async function () {
       const tid = taskId("task-zero");
       await expect(
         taskEscrow.connect(requester).deposit(tid, 0, provider.address, deadline, agreementHash)
-      ).to.be.revertedWith("TaskEscrow: zero amount");
+      ).to.be.revertedWith("Amount must be positive");
     });
 
     it("should reject zero provider address", async function () {
       const tid = taskId("task-noprov");
       await expect(
         taskEscrow.connect(requester).deposit(tid, depositAmount, ethers.ZeroAddress, deadline, agreementHash)
-      ).to.be.revertedWith("TaskEscrow: zero provider");
+      ).to.be.revertedWith("Invalid provider");
     });
 
     it("should reject deadline in the past", async function () {
@@ -86,7 +89,7 @@ describe("TaskEscrow", function () {
       const pastDeadline = Math.floor(Date.now() / 1000) - 3600;
       await expect(
         taskEscrow.connect(requester).deposit(tid, depositAmount, provider.address, pastDeadline, agreementHash)
-      ).to.be.revertedWith("TaskEscrow: deadline in the past");
+      ).to.be.revertedWith("Deadline must be future");
     });
   });
 
@@ -102,9 +105,10 @@ describe("TaskEscrow", function () {
       const expectedFee = (depositAmount * 50n) / 10000n;
       const expectedPayout = depositAmount - expectedFee;
 
+      // #10: event now matches doc spec (no provider param)
       await expect(taskEscrow.connect(requester).release(tid))
         .to.emit(taskEscrow, "FundsReleased")
-        .withArgs(tid, provider.address, expectedPayout, expectedFee);
+        .withArgs(tid, expectedPayout, expectedFee);
 
       const providerBalanceAfter = await mockUsdc.balanceOf(provider.address);
       const feeRecipientBalanceAfter = await mockUsdc.balanceOf(feeRecipient.address);
@@ -118,13 +122,13 @@ describe("TaskEscrow", function () {
       await taskEscrow.connect(requester).deposit(tid, depositAmount, provider.address, deadline, agreementHash);
 
       await expect(taskEscrow.connect(provider).release(tid)).to.be.revertedWith(
-        "TaskEscrow: only requester can release"
+        "Not requester"
       );
     });
 
     it("should reject release of non-locked task", async function () {
       const tid = taskId("task-empty");
-      await expect(taskEscrow.connect(requester).release(tid)).to.be.revertedWith("TaskEscrow: task not locked");
+      await expect(taskEscrow.connect(requester).release(tid)).to.be.revertedWith("Not locked");
     });
   });
 
@@ -142,9 +146,10 @@ describe("TaskEscrow", function () {
 
       const balanceBefore = await mockUsdc.balanceOf(requester.address);
 
+      // #10: event now matches doc spec (no extra params)
       await expect(taskEscrow.connect(requester).refundOnTimeout(tid))
         .to.emit(taskEscrow, "FundsRefunded")
-        .withArgs(tid, requester.address, depositAmount);
+        .withArgs(tid);
 
       const balanceAfter = await mockUsdc.balanceOf(requester.address);
       expect(balanceAfter - balanceBefore).to.equal(depositAmount);
@@ -155,7 +160,7 @@ describe("TaskEscrow", function () {
       await taskEscrow.connect(requester).deposit(tid, depositAmount, provider.address, deadline, agreementHash);
 
       await expect(taskEscrow.connect(requester).refundOnTimeout(tid)).to.be.revertedWith(
-        "TaskEscrow: deadline not passed"
+        "Not expired"
       );
     });
   });
@@ -190,8 +195,24 @@ describe("TaskEscrow", function () {
 
       const evidenceHash = ethers.keccak256(ethers.toUtf8Bytes("test evidence"));
       await expect(taskEscrow.connect(owner).dispute(tid, evidenceHash)).to.be.revertedWith(
-        "TaskEscrow: only requester or provider can dispute"
+        "Not party"
       );
+    });
+  });
+
+  // #4: test setPlatformFee
+  describe("Platform Fee Management", function () {
+    it("should allow owner to update platform fee", async function () {
+      await taskEscrow.connect(owner).setPlatformFee(100); // 1%
+      expect(await taskEscrow.platformFeesBps()).to.equal(100);
+    });
+
+    it("should reject fee too high", async function () {
+      await expect(taskEscrow.connect(owner).setPlatformFee(1001)).to.be.revertedWith("Fee too high");
+    });
+
+    it("should reject fee change from non-owner", async function () {
+      await expect(taskEscrow.connect(requester).setPlatformFee(100)).to.be.reverted;
     });
   });
 });

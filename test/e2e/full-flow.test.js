@@ -42,7 +42,8 @@ describe("E2E: Full Flow", function () {
 
     // Set trust relationships
     await agentRegistry.setTrustedContract(await taskEscrow.getAddress(), true);
-    await reputationOracle.setTrustedCaller(owner.address, true);
+    // #13: renamed from setTrustedCaller to setTrusted
+    await reputationOracle.setTrusted(owner.address, true);
 
     // Mint USDC to requester
     await mockUsdc.mint(requester.address, 100000000n); // 100 USDC
@@ -68,6 +69,11 @@ describe("E2E: Full Flow", function () {
     expect(agents[0]).to.equal(1);
     console.log("  [2] Agent found by capability search");
 
+    // #7: Verify addressToAgentId mapping
+    const mappedId = await agentRegistry.addressToAgentId(agentOwner.address);
+    expect(mappedId).to.equal(1);
+    console.log("  [2b] addressToAgentId mapping verified");
+
     // Step 3: Deposit funds into escrow
     const tid = taskId("e2e-task-1");
     const requesterBalanceBefore = await mockUsdc.balanceOf(requester.address);
@@ -80,6 +86,12 @@ describe("E2E: Full Flow", function () {
     const requesterBalanceAfterDeposit = await mockUsdc.balanceOf(requester.address);
     expect(requesterBalanceBefore - requesterBalanceAfterDeposit).to.equal(taskAmount);
     console.log("  [3] Funds deposited into escrow:", taskAmount.toString(), "units");
+
+    // #5: Verify taskId and lockedAt fields
+    const taskData = await taskEscrow.tasks(tid);
+    expect(taskData.taskId).to.equal(tid);
+    expect(taskData.lockedAt).to.be.gt(0);
+    console.log("  [3b] Task struct fields (taskId, lockedAt) verified");
 
     // Step 4: Release funds (requester approves task completion)
     const providerBalanceBefore = await mockUsdc.balanceOf(agentOwner.address);
@@ -118,5 +130,11 @@ describe("E2E: Full Flow", function () {
     expect(history.length).to.equal(1);
     expect(history[0]).to.equal(480);
     console.log("  [7] Rating history verified");
+
+    // #11: Verify lastUpdated in ReputationOracle
+    const record = await reputationOracle.getReputationRecord(1);
+    expect(record.lastUpdated).to.be.gt(0);
+    expect(record.cumulativeScore).to.equal(480);
+    console.log("  [8] Reputation record verified (lastUpdated, cumulativeScore)");
   });
 });

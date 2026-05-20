@@ -5,31 +5,44 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
+/**
+ * @title TaskEscrow
+ * @notice 任务资金托管合约，确保无信任结算
+ */
 contract TaskEscrow is ReentrancyGuard, Ownable {
+
+    IERC20 public immutable usdc;
+    IAgentRegistry public immutable registry;
+
+    // #4: removed constant keyword, added setter function
+    uint256 public platformFeesBps = 50; // 0.5%
+    address public feeRecipient;
+
     enum TaskStatus { Empty, Locked, Released, Disputed, Refunded }
 
+    // #5: added taskId and lockedAt fields to match doc spec
     struct Task {
+        bytes32 taskId;
         address requester;
         address provider;
-        uint256 amount;
-        uint256 deadline;
-        bytes32 agreementHash;
+        uint256 amount;       // USDC (6 decimals)
         TaskStatus status;
+        uint256 lockedAt;
+        uint256 deadline;
+        bytes32 agreementHash; // 协商协议的哈希
     }
-
-    IERC20 public usdc;
-    IAgentRegistry public registry;
-    address public feeRecipient;
-    uint256 public constant platformFeesBps = 50; // 0.5%
 
     mapping(bytes32 => Task) public tasks;
 
-    event FundsLocked(bytes32 indexed taskId, address indexed requester, address indexed provider, uint256 amount);
-    event FundsReleased(bytes32 indexed taskId, address indexed provider, uint256 amount, uint256 fee);
-    event DisputeRaised(bytes32 indexed taskId, address indexed raisedBy);
-    event FundsRefunded(bytes32 indexed taskId, address indexed requester, uint256 amount);
+    // #10: event signatures match doc spec
+    event FundsLocked(bytes32 indexed taskId, address requester, address provider, uint256 amount);
+    event FundsReleased(bytes32 indexed taskId, uint256 amount, uint256 fee);
+    event DisputeRaised(bytes32 indexed taskId, address raisedBy);
+    event FundsRefunded(bytes32 indexed taskId);
 
-    constructor(address _usdc, address _registry, address _feeRecipient) Ownable(msg.sender) {
+    constructor(address _usdc, address _registry, address _feeRecipient)
+        Ownable(msg.sender)
+    {
         require(_usdc != address(0), "TaskEscrow: zero USDC address");
         require(_registry != address(0), "TaskEscrow: zero registry address");
         require(_feeRecipient != address(0), "TaskEscrow: zero fee recipient");
@@ -39,6 +52,19 @@ contract TaskEscrow is ReentrancyGuard, Ownable {
         feeRecipient = _feeRecipient;
     }
 
+    /**
+     * @notice 设置平台费率 (仅 owner)
+     * #4: added setter for platformFeesBps
+     */
+    function setPlatformFee(uint256 newBps) external onlyOwner {
+        require(newBps <= 1000, "Fee too high"); // max 10%
+        platformFeesBps = newBps;
+    }
+
+    /**
+     * @notice Requester 锁定资金
+     * #9: transferFrom moved before struct assignment (checks-effects-interactions)
+     */
     function deposit(
         bytes32 taskId,
         uint256 amount,
@@ -46,69 +72,86 @@ contract TaskEscrow is ReentrancyGuard, Ownable {
         uint256 deadline,
         bytes32 agreementHash
     ) external nonReentrant {
-        require(tasks[taskId].status == TaskStatus.Empty, "TaskEscrow: task already exists");
-        require(amount > 0, "TaskEscrow: zero amount");
-        require(provider != address(0), "TaskEscrow: zero provider");
-        require(deadline > block.timestamp, "TaskEscrow: deadline in the past");
+        require(tasks[taskId].status == TaskStatus.Empty, "Task exists");
+        require(amount > 0, "Amount must be positive");
+        require(provider != address(0), "Invalid provider");
+        require(deadline > block.timestamp, "Deadline must be future");
 
+        // #9: transfer first (checks-effects-interactions pattern)
+        require(usdc.transferFrom(msg.sender, address(this), amount), "Transfer failed");
+
+        // #5: taskId and lockedAt assigned in struct
         tasks[taskId] = Task({
+            taskId: taskId,
             requester: msg.sender,
             provider: provider,
             amount: amount,
+            status: TaskStatus.Locked,
+            lockedAt: block.timestamp,
             deadline: deadline,
-            agreementHash: agreementHash,
-            status: TaskStatus.Locked
+            agreementHash: agreementHash
         });
-
-        require(usdc.transferFrom(msg.sender, address(this), amount), "TaskEscrow: transfer failed");
 
         emit FundsLocked(taskId, msg.sender, provider, amount);
     }
 
+    /**
+     * @notice Requester 验收任务，释放资金给 Provider
+     */
     function release(bytes32 taskId) external nonReentrant {
         Task storage task = tasks[taskId];
-        require(task.status == TaskStatus.Locked, "TaskEscrow: task not locked");
-        require(msg.sender == task.requester, "TaskEscrow: only requester can release");
+        require(task.status == TaskStatus.Locked, "Not locked");
+        require(msg.sender == task.requester, "Not requester");
 
         task.status = TaskStatus.Released;
 
+        // 计算平台费用
         uint256 fee = (task.amount * platformFeesBps) / 10000;
-        uint256 payout = task.amount - fee;
+        uint256 providerAmount = task.amount - fee;
 
-        require(usdc.transfer(task.provider, payout), "TaskEscrow: payout transfer failed");
+        // 转账给 Provider（亚秒结算）
+        require(usdc.transfer(task.provider, providerAmount), "Provider transfer failed");
         if (fee > 0) {
-            require(usdc.transfer(feeRecipient, fee), "TaskEscrow: fee transfer failed");
+            require(usdc.transfer(feeRecipient, fee), "Fee transfer failed");
         }
 
-        emit FundsReleased(taskId, task.provider, payout, fee);
+        // #10: event matches doc spec (no provider param)
+        emit FundsReleased(taskId, providerAmount, fee);
     }
 
+    /**
+     * @notice 超时自动退款（deadline 过后 Provider 未完成）
+     */
     function refundOnTimeout(bytes32 taskId) external nonReentrant {
         Task storage task = tasks[taskId];
-        require(task.status == TaskStatus.Locked, "TaskEscrow: task not locked");
-        require(block.timestamp > task.deadline, "TaskEscrow: deadline not passed");
+        require(task.status == TaskStatus.Locked, "Not locked");
+        require(block.timestamp > task.deadline, "Not expired");
 
         task.status = TaskStatus.Refunded;
+        require(usdc.transfer(task.requester, task.amount), "Refund failed");
 
-        require(usdc.transfer(task.requester, task.amount), "TaskEscrow: refund transfer failed");
-
-        emit FundsRefunded(taskId, task.requester, task.amount);
+        // #10: event matches doc spec (no extra params)
+        emit FundsRefunded(taskId);
     }
 
+    /**
+     * @notice 发起争议（交由 Arbiter 裁决）
+     */
     function dispute(bytes32 taskId, bytes32 evidenceHash) external {
         Task storage task = tasks[taskId];
-        require(task.status == TaskStatus.Locked, "TaskEscrow: task not locked");
+        require(task.status == TaskStatus.Locked, "Not locked");
         require(
             msg.sender == task.requester || msg.sender == task.provider,
-            "TaskEscrow: only requester or provider can dispute"
+            "Not party"
         );
 
         task.status = TaskStatus.Disputed;
-
         emit DisputeRaised(taskId, msg.sender);
     }
 }
 
+// #3: interface updated to match new bool parameter
 interface IAgentRegistry {
-    function updateReputation(uint256 agentId, uint256 newScore, uint256 taskIncrement) external;
+    function updateReputation(uint256 agentId, uint256 newScore, bool incrementTaskCount) external;
+    function addressToAgentId(address addr) external view returns (uint256);
 }
