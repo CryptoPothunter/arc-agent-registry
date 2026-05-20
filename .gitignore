@@ -37,3 +37,6 @@ npm-debug.log*
 # Misc
 *.tgz
 .cache/
+
+# Local IPFS storage (dev mode)
+backend/.ipfs-local/
