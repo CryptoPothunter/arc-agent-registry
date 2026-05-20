@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import AgentCard from '../components/AgentCard';
 import { searchAgents, getAgents } from '../services/api';
+import useWebSocket from '../hooks/useWebSocket';
 
 export default function Explore() {
   const [search, setSearch] = useState('');
@@ -57,6 +58,16 @@ export default function Explore() {
       setLoading(false);
     }
   }, [search, maxPrice, minReputation, onlineOnly]);
+
+  // WebSocket: auto-refresh when new agents register
+  useWebSocket({
+    topics: ['registry:new_agents'],
+    onMessage: useCallback((data) => {
+      if (data.event === 'agent_registered') {
+        fetchAgents();
+      }
+    }, [fetchAgents]),
+  });
 
   // Debounced fetch on filter change
   useEffect(() => {

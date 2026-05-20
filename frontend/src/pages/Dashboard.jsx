@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { getAgents } from '../services/api';
+import useWebSocket from '../hooks/useWebSocket';
 
 export default function Dashboard({ tab }) {
   const [stats, setStats] = useState({
@@ -14,8 +15,7 @@ export default function Dashboard({ tab }) {
   const [recentActivity, setRecentActivity] = useState([]);
   const [earningsData, setEarningsData] = useState([]);
 
-  useEffect(() => {
-    async function fetchDashboardData() {
+  const fetchDashboardData = useCallback(async () => {
       setLoading(true);
       try {
         const result = await getAgents();
@@ -69,8 +69,21 @@ export default function Dashboard({ tab }) {
         setLoading(false);
       }
     }
-    fetchDashboardData();
   }, []);
+
+  // WebSocket: auto-refresh on registry events
+  useWebSocket({
+    topics: ['registry:new_agents'],
+    onMessage: useCallback((data) => {
+      if (data.event === 'agent_registered') {
+        fetchDashboardData();
+      }
+    }, [fetchDashboardData]),
+  });
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, [fetchDashboardData]);
 
   const overviewCards = [
     { label: 'Total Earnings', value: `$${stats.totalEarnings.toLocaleString()}`, sub: 'USDC', color: 'text-green-600', bg: 'bg-green-50', icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },

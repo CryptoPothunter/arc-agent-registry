@@ -1,22 +1,34 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 
-const WS_BASE = process.env.REACT_APP_WS_URL || 'ws://localhost:3001/ws';
+const WS_URL = process.env.REACT_APP_WS_URL || 'ws://localhost:3001';
 
-export default function useWebSocket(path, { onMessage, autoConnect = true } = {}) {
+/**
+ * useWebSocket - manages a WebSocket connection with topic subscriptions,
+ * auto-reconnect, and message handling.
+ *
+ * @param {object} options
+ * @param {string[]} [options.topics] - Topics to subscribe to on connect.
+ * @param {function} [options.onMessage] - Callback for incoming messages.
+ * @param {boolean} [options.autoConnect] - Whether to connect immediately (default true).
+ * @returns {object} { connected, lastMessage, send, subscribe, unsubscribe, connect, disconnect }
+ */
+export default function useWebSocket({ topics = [], onMessage, autoConnect = true } = {}) {
   const [connected, setConnected] = useState(false);
   const [lastMessage, setLastMessage] = useState(null);
   const wsRef = useRef(null);
   const reconnectTimer = useRef(null);
   const onMessageRef = useRef(onMessage);
+  const topicsRef = useRef(topics);
 
-  // Keep callback ref up to date
+  // Keep refs up to date
   onMessageRef.current = onMessage;
+  topicsRef.current = topics;
 
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
     try {
-      const ws = new WebSocket(`${WS_BASE}${path}`);
+      const ws = new WebSocket(WS_URL);
 
       ws.onopen = () => {
         setConnected(true);
@@ -24,11 +36,19 @@ export default function useWebSocket(path, { onMessage, autoConnect = true } = {
           clearTimeout(reconnectTimer.current);
           reconnectTimer.current = null;
         }
+        // Subscribe to initial topics
+        for (const topic of topicsRef.current) {
+          ws.send(JSON.stringify({ type: 'subscribe', topic }));
+        }
       };
 
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+          // Ignore system messages (subscribed/unsubscribed/connected)
+          if (data.type === 'subscribed' || data.type === 'unsubscribed' || data.type === 'connected') {
+            return;
+          }
           setLastMessage(data);
           onMessageRef.current?.(data);
         } catch {
@@ -49,9 +69,9 @@ export default function useWebSocket(path, { onMessage, autoConnect = true } = {
 
       wsRef.current = ws;
     } catch (err) {
-      console.error('WebSocket connection error:', err);
+      console.warn('WebSocket connection failed:', err.message);
     }
-  }, [path]);
+  }, []);
 
   const disconnect = useCallback(() => {
     if (reconnectTimer.current) {
@@ -69,10 +89,18 @@ export default function useWebSocket(path, { onMessage, autoConnect = true } = {
     }
   }, []);
 
+  const subscribe = useCallback((topic) => {
+    send({ type: 'subscribe', topic });
+  }, [send]);
+
+  const unsubscribe = useCallback((topic) => {
+    send({ type: 'unsubscribe', topic });
+  }, [send]);
+
   useEffect(() => {
     if (autoConnect) connect();
     return disconnect;
   }, [autoConnect, connect, disconnect]);
 
-  return { connected, lastMessage, send, connect, disconnect };
+  return { connected, lastMessage, send, subscribe, unsubscribe, connect, disconnect };
 }
