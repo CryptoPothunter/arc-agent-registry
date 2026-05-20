@@ -1,6 +1,7 @@
 /**
  * SettlementService - handles post-task settlement.
- * Orchestrates fund release, reputation updates, and yield redemption.
+ * Orchestrates fund release, reputation updates, yield redemption,
+ * and cross-chain fund consolidation via Gateway CCTP.
  */
 
 const EscrowService = require('./escrow.service');
@@ -23,15 +24,17 @@ class SettlementService {
    * - Redeems any USYC yield if funds were deployed.
    * - Releases escrowed funds to the provider.
    * - Updates the provider's reputation score.
+   * - Executes cross-chain consolidation if needed.
    *
    * @param {object} params
    * @param {string} params.taskId - Task identifier.
    * @param {string} params.providerAgentId - Provider agent ID for reputation update.
    * @param {number} [params.qualityScore] - Quality score (0-100) from validation.
    * @param {boolean} [params.yieldDeployed] - Whether funds were deployed to USYC.
+   * @param {string} [params.consolidateToChain] - Target chain for fund consolidation.
    * @returns {Promise<object>} Settlement result.
    */
-  async settle({ taskId, providerAgentId, qualityScore = 100, yieldDeployed = false }) {
+  async settle({ taskId, providerAgentId, qualityScore = 100, yieldDeployed = false, consolidateToChain }) {
     const steps = [];
 
     try {
@@ -43,56 +46,30 @@ class SettlementService {
             shares: escrowStatus.amount,
             signer: this.escrow.signer,
           });
-          steps.push({ step: 'usyc_redeem', success: true, ...redeemResult });
+          steps.push({
+            step: 'usyc_redeem',
+            success: true,
+            usycShares: escrowStatus.amount,
+            ...redeemResult,
+          });
         } catch (err) {
           steps.push({ step: 'usyc_redeem', success: false, error: err.message });
           // Continue with settlement even if USYC redemption fails
         }
       }
 
-      // Step 2: Check if cross-chain transfer is needed
-      try {
-        const escrowStatus = yieldDeployed
-          ? (steps.find((s) => s.step === 'usyc_redeem') || {})._escrowStatus
-            || await this.escrow.getEscrowStatus(taskId)
-          : await this.escrow.getEscrowStatus(taskId);
-
-        const providerAgent = await this.registry.getAgentInfo(providerAgentId);
-        const providerAddress = providerAgent.walletAddress;
-
-        if (providerAddress) {
-          const balances = await this.gateway.getUnifiedBalance(providerAddress);
-          // If the provider has balances on multiple chains, a cross-chain
-          // consolidation may be required after release. Log this for now.
-          const chainCount = Object.keys(balances.balances).length;
-          if (chainCount > 1) {
-            steps.push({
-              step: 'cross_chain_check',
-              success: true,
-              chainsDetected: chainCount,
-              message: 'Provider has multi-chain presence; cross-chain transfer may be needed post-release.',
-            });
-          } else {
-            steps.push({ step: 'cross_chain_check', success: true, chainsDetected: chainCount });
-          }
-        }
-      } catch (err) {
-        steps.push({ step: 'cross_chain_check', success: false, error: err.message });
-        // Continue with settlement even if cross-chain check fails
-      }
-
-      // Step 3: Release escrowed funds to provider
+      // Step 2: Release escrowed funds to provider
       const releaseResult = await this.escrow.releaseFunds(taskId);
       steps.push({ step: 'escrow_release', success: true, ...releaseResult });
 
-      // Step 4: Update provider reputation via ReputationService
+      // Step 3: Update provider reputation via ReputationService
       try {
         const currentRecord = await this.reputation.getAverageScore(providerAgentId);
         const currentScore = currentRecord.averageScore || 0;
 
         // Convert qualityScore (0-100) to contract rating scale (100-500)
         const contractRating = Math.round(100 + (qualityScore / 100) * 400);
-        await this.reputation.submitRating(providerAgentId, contractRating);
+        const ratingResult = await this.reputation.submitRating(providerAgentId, contractRating);
 
         // Weighted moving average: 70% existing score + 30% new quality score
         const newScore = Math.round(currentScore * 0.7 + qualityScore * 0.3);
@@ -103,9 +80,81 @@ class SettlementService {
           previousScore: currentScore,
           newScore,
           qualityScore,
+          contractRating,
+          txHash: ratingResult.txHash,
         });
       } catch (err) {
         steps.push({ step: 'reputation_update', success: false, error: err.message });
+      }
+
+      // Step 4: Cross-chain fund consolidation (if provider is multi-chain)
+      try {
+        const providerAgent = await this.registry.getAgentInfo(providerAgentId);
+        const providerAddress = providerAgent.walletAddress;
+
+        if (providerAddress) {
+          const balances = await this.gateway.getUnifiedBalance(providerAddress);
+          const chainCount = Object.keys(balances.balances).filter(
+            (chain) => parseFloat(balances.balances[chain]) > 0
+          ).length;
+
+          if (chainCount > 1 && consolidateToChain) {
+            // Execute cross-chain consolidation to target chain
+            const consolidationResults = [];
+
+            for (const [chain, balance] of Object.entries(balances.balances)) {
+              if (chain === consolidateToChain || parseFloat(balance) === 0) continue;
+
+              try {
+                const transferResult = await this.gateway.crossChainTransfer({
+                  from: providerAddress,
+                  to: providerAddress,
+                  amount: balance,
+                  sourceChain: chain,
+                  destChain: consolidateToChain,
+                  signer: this.escrow.signer,
+                });
+                consolidationResults.push({
+                  chain,
+                  amount: balance,
+                  status: transferResult.status,
+                  txHash: transferResult.burnTxHash || transferResult.txHash,
+                });
+              } catch (err) {
+                consolidationResults.push({
+                  chain,
+                  amount: balance,
+                  status: 'failed',
+                  error: err.message,
+                });
+              }
+            }
+
+            steps.push({
+              step: 'cross_chain_consolidation',
+              success: true,
+              targetChain: consolidateToChain,
+              transfers: consolidationResults,
+            });
+          } else if (chainCount > 1) {
+            steps.push({
+              step: 'cross_chain_check',
+              success: true,
+              chainsDetected: chainCount,
+              balances: balances.balances,
+              message: 'Provider has multi-chain presence. Set consolidateToChain to auto-consolidate.',
+            });
+          } else {
+            steps.push({
+              step: 'cross_chain_check',
+              success: true,
+              chainsDetected: chainCount,
+              message: 'Single-chain provider, no consolidation needed.',
+            });
+          }
+        }
+      } catch (err) {
+        steps.push({ step: 'cross_chain_check', success: false, error: err.message });
       }
 
       return {
@@ -124,6 +173,25 @@ class SettlementService {
         steps,
       };
     }
+  }
+
+  /**
+   * Get settlement summary for a task.
+   * @param {string} taskId
+   * @returns {Promise<object>} Settlement summary.
+   */
+  async getSettlementSummary(taskId) {
+    const escrowStatus = await this.escrow.getEscrowStatus(taskId);
+    const settled = escrowStatus.status === 'released';
+
+    return {
+      taskId,
+      settled,
+      escrowStatus: escrowStatus.status,
+      amount: escrowStatus.amount,
+      provider: escrowStatus.provider,
+      client: escrowStatus.client,
+    };
   }
 }
 
