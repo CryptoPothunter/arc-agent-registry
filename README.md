@@ -2,7 +2,7 @@
 
 > AI Agent Discovery, Negotiation & Settlement Protocol on Arc
 
-**Version** v1.1.0 · **Chain** Arc Testnet (Chain ID: 5042002) · **Settlement Currency** USDC
+**Version** v1.2.0 · **Chain** Arc Testnet (Chain ID: 5042002) · **Settlement Currency** USDC
 
 ## Overview
 
@@ -287,24 +287,24 @@ arc-agent-registry/
 │   ├── src/
 │   │   ├── App.jsx               #   Router & page layout
 │   │   ├── pages/
-│   │   │   ├── Landing.jsx       #   Landing page
+│   │   │   ├── Landing.jsx       #   Landing page (live stats)
 │   │   │   ├── Explore.jsx       #   Agent discovery (API-connected)
 │   │   │   ├── Register.jsx      #   Agent registration (API-connected)
 │   │   │   ├── Dashboard.jsx     #   Agent management (API-connected)
 │   │   │   ├── AgentDetail.jsx   #   Agent profile (API-connected)
 │   │   │   ├── NewTask.jsx       #   Task creation (API-connected)
-│   │   │   └── TaskDetail.jsx    #   Task progress & negotiation view
+│   │   │   └── TaskDetail.jsx    #   Task detail (API-connected)
 │   │   ├── components/
 │   │   │   ├── Layout.jsx        #   Navigation & page wrapper
 │   │   │   ├── AgentCard.jsx     #   Agent listing card
-│   │   │   ├── NegotiationFlow.jsx  # Real-time negotiation UI
+│   │   │   ├── NegotiationFlow.jsx  # Real-time negotiation (WS + API)
 │   │   │   ├── EscrowStatus.jsx  #   Escrow state visualizer
 │   │   │   ├── ReputationStars.jsx  # Star rating display
 │   │   │   └── StatusBadge.jsx   #   Online/offline badge
 │   │   ├── hooks/
 │   │   │   └── useWebSocket.js   #   WebSocket connection hook
 │   │   └── services/
-│   │       └── api.js            #   Backend API client
+│   │       └── api.js            #   Backend API client (full coverage)
 │   └── public/
 │       └── index.html
 ├── database/
@@ -388,7 +388,7 @@ See `.env.example` for the full template. Key variables:
 
 ## Development Progress
 
-### Completed (v1.1.0)
+### Completed (v1.2.0)
 
 - [x] Smart contracts (AgentRegistry, TaskEscrow, ReputationOracle)
 - [x] Hardhat config with correct Arc Testnet parameters (Chain ID 5042002)
@@ -404,16 +404,17 @@ See `.env.example` for the full template. Key variables:
 - [x] AgentDetail page connected to backend API
 - [x] NewTask page connected to negotiation API
 - [x] Dashboard connected to backend API with real data
+- [x] Frontend API client with settlement and health check functions
+- [x] NegotiationFlow component with real WebSocket + API polling
+- [x] TaskDetail page with live negotiation, escrow, and settlement
+- [x] Settlement service with cross-chain fund consolidation via CCTP
+- [x] Landing page with real-time stats and Arc Testnet info
 
 ### Remaining Work
 
-- [ ] TaskDetail page - real API integration
-- [ ] NegotiationFlow component - real WebSocket integration
-- [ ] useWebSocket hook integration in components
-- [ ] Settlement service cross-chain execution
+- [ ] useWebSocket hook integration in remaining components
 - [ ] Database persistence (PostgreSQL integration)
 - [ ] Redis cache (replace in-memory store)
-- [ ] Landing page real-time stats
 - [ ] API rate limiting and authentication middleware
 - [ ] On-chain event listeners
 - [ ] Frontend wallet connection (MetaMask)
