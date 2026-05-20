@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { registerAgent } from '../services/api';
 
 const initialForm = {
   name: '', description: '', walletAddress: '',
@@ -13,6 +14,9 @@ export default function Register() {
   const [form, setForm] = useState(initialForm);
   const [newCap, setNewCap] = useState({ ...emptyCapability });
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState(null);
+  const [registeredAgent, setRegisteredAgent] = useState(null);
 
   const update = (field, value) => setForm((f) => ({ ...f, [field]: value }));
 
@@ -32,7 +36,36 @@ export default function Register() {
     return true;
   };
 
-  const handleSubmit = () => setSubmitted(true);
+  const handleSubmit = async () => {
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      const metadata = {
+        name: form.name,
+        description: form.description,
+        capabilities: form.capabilities.map((c) => c.name),
+        capabilityDetails: form.capabilities,
+        pricePerTask: form.capabilities.length > 0
+          ? Math.min(...form.capabilities.map((c) => c.price))
+          : 0,
+        endpoint: `https://agent.arc.network/${form.name.toLowerCase().replace(/\s+/g, '-')}`,
+        availability: form.availability,
+      };
+
+      const result = await registerAgent({
+        metadata,
+        walletAddress: form.walletAddress,
+      });
+
+      setRegisteredAgent(result.agent);
+      setSubmitted(true);
+    } catch (err) {
+      console.error('Registration failed:', err);
+      setSubmitError(err.message || 'Registration failed. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   if (submitted) {
     return (
@@ -43,7 +76,22 @@ export default function Register() {
           </svg>
         </div>
         <h2 className="text-2xl font-bold text-gray-900 mb-2">Agent Registered!</h2>
-        <p className="text-gray-500 mb-6">Your agent <span className="font-semibold">{form.name}</span> has been successfully registered on the Arc Agent Registry.</p>
+        <p className="text-gray-500 mb-2">Your agent <span className="font-semibold">{form.name}</span> has been successfully registered on the Arc Agent Registry.</p>
+        {registeredAgent && (
+          <div className="text-left bg-gray-50 rounded-lg p-4 mb-6 max-w-md mx-auto">
+            <p className="text-sm text-gray-600"><span className="font-medium">Agent ID:</span> {registeredAgent.agentId}</p>
+            {registeredAgent.txHash && (
+              <p className="text-sm text-gray-600 mt-1">
+                <span className="font-medium">TX:</span>{' '}
+                <a href={`https://testnet.arcscan.app/tx/${registeredAgent.txHash}`} target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:underline font-mono text-xs">
+                  {registeredAgent.txHash.slice(0, 10)}...{registeredAgent.txHash.slice(-8)}
+                </a>
+              </p>
+            )}
+            <p className="text-sm text-gray-600 mt-1"><span className="font-medium">Metadata CID:</span> <span className="font-mono text-xs">{registeredAgent.metadataURI?.slice(0, 20)}...</span></p>
+          </div>
+        )}
+        {!registeredAgent && <div className="mb-6" />}
         <a href="/dashboard" className="btn-primary">Go to Dashboard</a>
       </div>
     );
@@ -200,11 +248,16 @@ export default function Register() {
               Continue
             </button>
           ) : (
-            <button onClick={handleSubmit} className="btn-primary text-sm py-2">
-              Register Agent
+            <button onClick={handleSubmit} disabled={submitting} className="btn-primary text-sm py-2 disabled:opacity-50 disabled:cursor-not-allowed">
+              {submitting ? 'Registering...' : 'Register Agent'}
             </button>
           )}
         </div>
+        {submitError && (
+          <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-sm text-red-700">{submitError}</p>
+          </div>
+        )}
       </div>
     </div>
   );
