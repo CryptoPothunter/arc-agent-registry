@@ -2,10 +2,17 @@
  * Pipeline Routes - DAG-based pipeline orchestration.
  * Allows creation of multi-step pipelines, status tracking,
  * and AI-powered task decomposition into sub-tasks.
+ *
+ * Integrates with OrchestratorAgent for DeepSeek-powered DAG decomposition.
  */
 
 const express = require('express');
 const router = express.Router();
+const OrchestratorAgent = require('../agents/orchestrator.agent');
+
+// Singleton orchestrator instance
+const orchestrator = new OrchestratorAgent();
+orchestrator.start();
 
 // ---------------------------------------------------------------------------
 // In-memory store
@@ -44,23 +51,60 @@ function computePipelineStatus(pipeline) {
 }
 
 /**
- * Simple AI task decomposition stub.
- * In production this would call an LLM to break a goal into sub-tasks.
+ * AI-powered task decomposition via OrchestratorAgent (DeepSeek).
+ * Decomposes a task description into a DAG of subtasks using the AI agent.
+ * Falls back to a simple single-node DAG if AI is unavailable.
+ *
+ * @param {string} pipelineId - The pipeline ID to associate with the DAG.
+ * @param {string} description - Task description to decompose.
+ * @param {object} hints - Optional hints (capability, budget, constraints).
+ * @returns {Promise<Array>} Array of step objects.
  */
-function decomposeTask(description, hints) {
-  const subtasks = [
-    { name: 'Analyze requirements', capability: 'data-analysis' },
-    { name: 'Execute core task', capability: hints?.capability || 'text-generation' },
-    { name: 'Validate output', capability: 'code-review' },
-    { name: 'Summarize results', capability: 'text-generation' },
+async function decomposeTask(pipelineId, description, hints) {
+  const totalBudget = hints?.budget || 100; // default budget in USDC
+  const taskSpec = {
+    description,
+    capabilities: hints?.capability ? [hints.capability] : [],
+    constraints: hints?.constraints || {},
+  };
+
+  try {
+    const pipeline = await orchestrator.decomposeTask(pipelineId, taskSpec, totalBudget);
+
+    if (pipeline.dag && pipeline.dag.nodes && pipeline.dag.nodes.length > 0) {
+      return pipeline.dag.nodes.map((node, idx) => ({
+        stepId: generateId('step'),
+        name: node.name,
+        capability: node.capability || 'general',
+        status: 'pending',
+        dependsOn: (node.dependencies || []).map((depId) => {
+          const depNode = pipeline.dag.nodes.find((n) => n.id === depId);
+          return depNode ? depNode.name : depId;
+        }),
+        budgetUsdc: node.budgetUsdc || 0,
+        result: null,
+      }));
+    }
+  } catch (err) {
+    console.warn(`[Pipeline] OrchestratorAgent decomposition failed: ${err.message}, using fallback`);
+  }
+
+  // Fallback: generate logical steps from description
+  const capability = hints?.capability || 'text-generation';
+  const fallbackSteps = [
+    { name: 'Analyze requirements', capability: 'data-analysis', budget: totalBudget * 0.15 },
+    { name: 'Execute core task', capability, budget: totalBudget * 0.50 },
+    { name: 'Validate output', capability: 'code-review', budget: totalBudget * 0.20 },
+    { name: 'Summarize results', capability: 'text-generation', budget: totalBudget * 0.15 },
   ];
 
-  return subtasks.map((t, idx) => ({
+  return fallbackSteps.map((t, idx) => ({
     stepId: generateId('step'),
     name: t.name,
     capability: t.capability,
     status: 'pending',
-    dependsOn: idx === 0 ? [] : [subtasks[idx - 1].name],
+    dependsOn: idx === 0 ? [] : [fallbackSteps[idx - 1].name],
+    budgetUsdc: t.budget,
     result: null,
   }));
 }
@@ -186,7 +230,7 @@ router.post('/:pipelineId/decompose', async (req, res, next) => {
       return res.status(400).json({ error: 'description is required for AI decomposition' });
     }
 
-    const decomposedSteps = decomposeTask(description, hints);
+    const decomposedSteps = await decomposeTask(pipelineId, description, hints);
     pipeline.steps = decomposedSteps;
     pipeline.status = 'pending';
     pipeline.updatedAt = new Date().toISOString();

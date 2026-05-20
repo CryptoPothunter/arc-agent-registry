@@ -2,13 +2,14 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { getNegotiationStatus, respondToNegotiation, depositEscrow } from '../services/api';
 import useWebSocket from '../hooks/useWebSocket';
 
-export default function NegotiationFlow({ taskId, negotiationId, onEscrowLock }) {
+export default function NegotiationFlow({ taskId, negotiationId, onEscrowLock, providerAddress }) {
   const [rounds, setRounds] = useState([]);
   const [isNegotiating, setIsNegotiating] = useState(true);
   const [counterPrice, setCounterPrice] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [depositing, setDepositing] = useState(false);
+  const [resolvedProviderAddress, setResolvedProviderAddress] = useState(providerAddress || null);
   const pollRef = useRef(null);
   const effectiveNegId = negotiationId || taskId;
 
@@ -37,6 +38,14 @@ export default function NegotiationFlow({ taskId, negotiationId, onEscrowLock })
           timestamp: h.timestamp,
         }));
         setRounds(mapped);
+      }
+
+      // Resolve provider address from negotiation data
+      if (!resolvedProviderAddress) {
+        const addr = neg.providerAddress || neg.providerWallet || neg.toAgentWallet || neg.toAgentId;
+        if (addr && addr.startsWith('0x')) {
+          setResolvedProviderAddress(addr);
+        }
       }
 
       // Check if negotiation is terminal
@@ -141,7 +150,7 @@ export default function NegotiationFlow({ taskId, negotiationId, onEscrowLock })
     setError(null);
     try {
       const result = await depositEscrow({
-        providerAddress: '0x0000000000000000000000000000000000000000',
+        providerAddress: resolvedProviderAddress || '0x0000000000000000000000000000000000000000',
         amount: price,
         deadline: Math.floor(Date.now() / 1000) + 86400,
         negotiationId: effectiveNegId,

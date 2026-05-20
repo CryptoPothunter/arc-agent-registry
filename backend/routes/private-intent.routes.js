@@ -2,10 +2,16 @@
  * Private Intent Routes - encrypted intent submission and AI matching.
  * Allows users to submit encrypted task intents, trigger AI-powered
  * matching with capable agents, and track intent status.
+ *
+ * Integrates with DiscoveryService for real agent lookup from the registry.
  */
 
 const express = require('express');
 const router = express.Router();
+const DiscoveryService = require('../services/discovery.service');
+
+// Singleton discovery instance
+const discoveryService = new DiscoveryService();
 
 // ---------------------------------------------------------------------------
 // Optional crypto setup for intent hashing
@@ -62,34 +68,39 @@ function hashPayload(payload) {
 }
 
 /**
- * Simulated AI matching algorithm.
- * In production this would query the agent registry and use embeddings
- * to match intent requirements with agent capabilities.
+ * AI-powered intent matching using DiscoveryService.
+ * Queries the real agent registry for agents matching the intent's
+ * capability and budget, then scores them by relevance.
+ *
+ * @param {object} intent - The intent record.
+ * @returns {Promise<Array>} Matched agents with scores.
  */
-function matchAgentsForIntent(intent) {
-  const simulatedAgents = [
-    { agentId: 'agent_alpha', capabilities: ['text-generation', 'code-review', 'translation'] },
-    { agentId: 'agent_beta', capabilities: ['image-generation', 'data-analysis'] },
-    { agentId: 'agent_gamma', capabilities: ['data-analysis', 'text-generation', 'code-review'] },
-    { agentId: 'agent_delta', capabilities: ['translation', 'text-generation'] },
-  ];
+async function matchAgentsForIntent(intent) {
+  try {
+    // Query the real agent registry via DiscoveryService
+    const agents = await discoveryService.smartSearch({
+      capability: intent.capability,
+      maxPrice: intent.maxBudget,
+      availableOnly: true,
+      limit: 10,
+    });
 
-  const matches = simulatedAgents
-    .map((agent) => {
-      const capabilityMatch = agent.capabilities.includes(intent.capability) ? 0.7 : 0.1;
-      const randomFactor = Math.random() * 0.3;
-      const score = Math.round((capabilityMatch + randomFactor) * 100) / 100;
-
-      return {
+    if (agents && agents.length > 0) {
+      return agents.map((agent) => ({
         agentId: agent.agentId,
-        score,
+        score: Math.round((agent.matchScore || agent.relevanceScore / 200 || 0.5) * 100) / 100,
         matchedAt: new Date().toISOString(),
-      };
-    })
-    .filter((m) => m.score > 0.3)
-    .sort((a, b) => b.score - a.score);
+        capabilities: agent.capabilities || agent.metadata?.capabilities || [],
+        matchReason: agent.matchReason || 'registry match',
+      }))
+      .sort((a, b) => b.score - a.score);
+    }
+  } catch (err) {
+    console.warn(`[PrivateIntent] DiscoveryService lookup failed: ${err.message}, using fallback`);
+  }
 
-  return matches;
+  // Fallback: return empty matches if no agents found
+  return [];
 }
 
 // ---------------------------------------------------------------------------
@@ -188,7 +199,7 @@ router.post('/:intentId/match', async (req, res, next) => {
       return res.status(409).json({ error: 'Intent has expired' });
     }
 
-    const matches = matchAgentsForIntent(intent);
+    const matches = await matchAgentsForIntent(intent);
     intent.matchedAgents = matches;
     intent.status = 'matched';
     intent.updatedAt = new Date().toISOString();

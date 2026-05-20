@@ -117,9 +117,9 @@ export default function Layout({ children }) {
             <div>
               <h4 className="text-white font-semibold mb-3">Resources</h4>
               <ul className="space-y-2 text-sm">
-                <li><span className="hover:text-white transition-colors cursor-pointer">Documentation</span></li>
-                <li><span className="hover:text-white transition-colors cursor-pointer">API Reference</span></li>
-                <li><span className="hover:text-white transition-colors cursor-pointer">GitHub</span></li>
+                <li><a href="https://github.com/CryptoPothunter/arc-agent-registry#readme" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">Documentation</a></li>
+                <li><a href="https://github.com/CryptoPothunter/arc-agent-registry#api-reference" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">API Reference</a></li>
+                <li><a href="https://github.com/CryptoPothunter/arc-agent-registry" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">GitHub</a></li>
               </ul>
             </div>
           </div>
