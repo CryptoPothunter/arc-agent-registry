@@ -3,6 +3,11 @@
  *
  * Provides REST API and WebSocket support for the agent registry,
  * discovery, negotiation, and escrow systems.
+ *
+ * #27: WebSocket supports both { action: 'subscribe', topics: [...] } (doc spec)
+ *      and legacy { type: 'subscribe', topic: '...' } format.
+ * #28: Broadcasts all required event types: negotiation_proposed, negotiation_update,
+ *      task_completed, escrow_locked, agent_registered, reputation_updated.
  */
 
 require('dotenv').config();
@@ -41,20 +46,40 @@ wss.on('connection', (ws) => {
     try {
       const msg = JSON.parse(raw);
 
-      if (msg.type === 'subscribe' && msg.topic) {
-        ws._topics.add(msg.topic);
-        if (!subscriptions.has(msg.topic)) {
-          subscriptions.set(msg.topic, new Set());
+      // #27: Support both doc-spec format { action, topics[] } and legacy { type, topic }
+      const action = msg.action || msg.type;
+      const topicList = msg.topics || (msg.topic ? [msg.topic] : []);
+
+      if (action === 'subscribe' && topicList.length > 0) {
+        for (const topic of topicList) {
+          ws._topics.add(topic);
+          if (!subscriptions.has(topic)) {
+            subscriptions.set(topic, new Set());
+          }
+          subscriptions.get(topic).add(ws);
         }
-        subscriptions.get(msg.topic).add(ws);
-        ws.send(JSON.stringify({ type: 'subscribed', topic: msg.topic }));
+        ws.send(JSON.stringify({
+          type: 'subscribed',
+          topics: topicList,
+          // Legacy compat: include single topic field
+          topic: topicList.length === 1 ? topicList[0] : undefined,
+        }));
       }
 
-      if (msg.type === 'unsubscribe' && msg.topic) {
-        ws._topics.delete(msg.topic);
-        const subs = subscriptions.get(msg.topic);
-        if (subs) subs.delete(ws);
-        ws.send(JSON.stringify({ type: 'unsubscribed', topic: msg.topic }));
+      if (action === 'unsubscribe' && topicList.length > 0) {
+        for (const topic of topicList) {
+          ws._topics.delete(topic);
+          const subs = subscriptions.get(topic);
+          if (subs) {
+            subs.delete(ws);
+            if (subs.size === 0) subscriptions.delete(topic);
+          }
+        }
+        ws.send(JSON.stringify({
+          type: 'unsubscribed',
+          topics: topicList,
+          topic: topicList.length === 1 ? topicList[0] : undefined,
+        }));
       }
     } catch {
       ws.send(JSON.stringify({ type: 'error', message: 'Invalid JSON' }));
@@ -76,14 +101,25 @@ wss.on('connection', (ws) => {
 
 /**
  * Broadcast a message to all subscribers of a topic.
+ * #28: All event payloads include { type, event, topic, timestamp } per doc spec.
+ * Supported event types: negotiation_proposed, negotiation_update, negotiation_accepted,
+ *   negotiation_rejected, task_completed, escrow_locked, escrow_released,
+ *   agent_registered, reputation_updated.
+ *
  * @param {string} topic - e.g. "agent:123:negotiation", "registry:new_agents"
- * @param {object} data - Payload to send.
+ * @param {object} data - Payload to send. Must include `type` or `event` field.
  */
 function wsNotify(topic, data) {
   const subs = subscriptions.get(topic);
   if (!subs || subs.size === 0) return;
 
-  const payload = JSON.stringify({ topic, ...data, timestamp: new Date().toISOString() });
+  const payload = JSON.stringify({
+    topic,
+    type: data.type || data.event || 'notification',
+    event: data.event || data.type || 'notification',
+    ...data,
+    timestamp: new Date().toISOString(),
+  });
   for (const ws of subs) {
     if (ws.readyState === ws.OPEN) {
       ws.send(payload);

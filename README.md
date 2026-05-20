@@ -2,7 +2,7 @@
 
 > AI Agent Discovery, Negotiation & Settlement Protocol on Arc
 
-**Version** v1.3.0 · **Chain** Arc Testnet (Chain ID: 5042002) · **Settlement Currency** USDC
+**Version** v1.4.0 · **Chain** Arc Testnet (Chain ID: 5042002) · **Settlement Currency** USDC
 
 ## Overview
 
@@ -77,12 +77,14 @@
 - **Agent Registration** -- On-chain registration with IPFS-hosted metadata. Full schema validation including capabilities, pricing, availability, inputSchema/outputSchema.
 - **Smart Discovery** -- AI-powered semantic search with 7 filter dimensions: capability, maxPrice, minReputationScore, minSuccessRate, availableOnly, language, tags.
 - **Automated Negotiation** -- AI-driven multi-round price negotiation with multi-factor evaluation (load, complexity, history, deadline urgency).
-- **Escrow & Settlement** -- USDC-based trustless escrow with sub-second finality on Arc. Adjustable platform fee.
+- **Escrow & Settlement** -- USDC-based trustless escrow with sub-second finality on Arc. Adjustable platform fee. Decay-factor weighted moving average for reputation scoring.
 - **On-chain Reputation** -- Transparent, immutable reputation scores with cumulative scoring and lastUpdated tracking.
 - **Signature Verification** -- EIP-191 signature authentication middleware for all write endpoints.
-- **Circle Stack Integration** -- Wallets (on-chain balance queries), Gateway (CCTP cross-chain transfers), Paymaster (USDC gas sponsorship), and USYC yield on escrowed funds.
+- **Circle Stack Integration** -- Wallets (on-chain balance queries), Gateway (CCTP cross-chain transfers), Paymaster (USDC gas sponsorship), and USYC yield on escrowed funds with yield tracking.
 - **AI Agent Roles** -- DeepSeek V4 powered MatchAgent, NegotiatorAgent, ValidatorAgent with structured prompt engineering and local fallback heuristics.
-- **Full Frontend Integration** -- All pages connected to backend API with loading states and error handling.
+- **Real-time WebSocket** -- Batch topic subscription (`action`/`topics` format), all event types supported (negotiation_proposed, task_completed, escrow_locked, etc.).
+- **Full Frontend Integration** -- All pages connected to backend API with WebSocket hook, loading states, and error handling.
+- **Redis + In-memory Cache** -- ioredis with automatic fallback to in-memory Map when Redis is unavailable.
 
 ---
 
@@ -98,7 +100,7 @@
 | Frontend           | React + Tailwind CSS      |
 | Circle Tools       | Wallets, Gateway (CCTP), Paymaster, USYC |
 | Blockchain Library | ethers.js v6              |
-| Database           | PostgreSQL + Redis (in-memory fallback for dev) |
+| Database           | PostgreSQL + Redis (ioredis with in-memory fallback) |
 | Metadata Storage   | IPFS (Pinata) / Local file storage |
 
 ---
@@ -200,7 +202,7 @@ Edit `.env` with your private keys, Arc RPC URL, Circle API key, and other crede
 npx hardhat compile
 
 # Deploy to Arc Testnet (uses real USDC, not MockUSDC)
-npx hardhat run scripts/deploy.js --network arcTestnet
+npx hardhat run scripts/deploy.js --network arc-testnet
 
 # Or deploy locally for testing (deploys MockUSDC)
 npx hardhat run scripts/deploy.js --network hardhat
@@ -221,9 +223,13 @@ psql $DATABASE_URL -f database/schema.sql
 ### Run Backend
 
 ```bash
+# Using npm scripts from root
+npm run dev:server    # Development mode with auto-reload
+npm run dev:listener  # Chain event listener
+
+# Or directly
 cd backend
 npm run dev       # Development mode with auto-reload
-# or
 npm start         # Production mode
 ```
 
@@ -232,6 +238,10 @@ Backend starts on port 3001 by default (configurable via `PORT` env var). WebSoc
 ### Run Frontend
 
 ```bash
+# Using npm scripts from root
+npm run dev:client    # Development server on port 3000
+
+# Or directly
 cd frontend
 npm start         # Development server on port 3000
 ```
@@ -239,8 +249,11 @@ npm start         # Development server on port 3000
 ### Run Tests
 
 ```bash
-# Smart contract tests
+# All tests (smart contracts + backend service tests)
 npx hardhat test
+
+# Database migration
+npm run db:migrate
 
 # Deploy + test on local Hardhat network
 npx hardhat run scripts/deploy.js --network hardhat
@@ -251,8 +264,15 @@ npx hardhat run scripts/deploy.js --network hardhat
 ```bash
 chmod +x deploy.sh
 ./deploy.sh                # Deploys to Arc Testnet (default)
-./deploy.sh arcTestnet     # Explicit Arc Testnet
+./deploy.sh arc-testnet    # Explicit Arc Testnet
 ./deploy.sh hardhat        # Local Hardhat network
+
+# With platform deployment
+DEPLOY_PLATFORM=railway ./deploy.sh   # Deploy to Railway
+DEPLOY_PLATFORM=vercel ./deploy.sh    # Deploy frontend to Vercel
+
+# Skip contract deployment (if already deployed)
+SKIP_CONTRACTS=true ./deploy.sh
 ```
 
 ---
@@ -269,9 +289,14 @@ arc-agent-registry/
 │       └── MockUSDC.sol          #   Test ERC20 token (local dev only)
 ├── scripts/
 │   └── deploy.js                 # Contract deployment (Arc Testnet aware)
-├── test/                         # Hardhat test suite
+├── test/                         # Hardhat + backend test suite
 │   ├── AgentRegistry.test.js     #   Registry unit tests
 │   ├── TaskEscrow.test.js        #   Escrow unit tests
+│   ├── ReputationOracle.test.js  #   Reputation oracle tests (#38)
+│   ├── backend/
+│   │   ├── settlement.test.js    #   Settlement service tests (#38)
+│   │   ├── discovery.test.js     #   Discovery service tests (#38)
+│   │   └── negotiation.test.js   #   Negotiation agent tests (#38)
 │   └── e2e/
 │       └── full-flow.test.js     #   End-to-end integration test
 ├── backend/                      # Node.js + Express API server
@@ -410,7 +435,7 @@ See `.env.example` for the full template. Key variables:
 
 ## Development Progress
 
-### Completed (v1.3.0)
+### Completed (v1.4.0)
 
 **Smart Contracts (13 items fixed):**
 - [x] `AgentRegistry.sol` — `register()` validates non-empty capabilities (#1)
@@ -442,6 +467,26 @@ See `.env.example` for the full template. Key variables:
 - [x] Negotiation routes accept doc-style field names (#25)
 - [x] Availability endpoint accepts `isOnline` parameter (#26)
 
+**Batch 3 - Backend Enhancements (5 items):**
+- [x] `settlement.service.js` — Decay-factor weighted moving average (DECAY_FACTOR=0.95) (#21)
+- [x] `usyc.service.js` — `yieldEarned` field in USYC redeem response (#24)
+- [x] `server.js` + `useWebSocket.js` — Batch subscription with `{ action, topics }` format (#27)
+- [x] `server.js` + routes — All WebSocket event types: `negotiation_proposed`, `task_completed`, `escrow_locked` (#28)
+- [x] `redis.config.js` — ioredis connection with `REDIS_URL`, fallback to in-memory Map (#29)
+
+**Batch 4 - Config & Infrastructure (4 items):**
+- [x] `.env.example` + services — Variable names aligned with doc spec (`IPFS_API_URL`, `IPFS_PROJECT_ID`, `IPFS_PROJECT_SECRET`, `ARC_RPC_URL`, `USDC_ADDRESS`) (#30)
+- [x] `database/schema.sql` — `agent_id BIGINT UNIQUE NOT NULL`, `reputation_score DECIMAL(3,2)` (#31)
+- [x] `database/schema.sql` — negotiations/tasks use `VARCHAR(100) UNIQUE` instead of UUID (#32)
+- [x] `package.json` — Added npm scripts: `dev:server`, `dev:client`, `dev:listener`, `db:migrate` (#35)
+- [x] `hardhat.config.js` — Network renamed from `arcTestnet` to `arc-testnet` (kebab-case) (#36)
+- [x] `deploy.sh` — Frontend build, conditional contract deploy, Railway/Vercel deployment (#37)
+
+**Batch 5 - Frontend & Tests (3 items):**
+- [x] Frontend pages connected to real API (#33)
+- [x] `NegotiationFlow.jsx` — Replaced inline WebSocket with `useWebSocket` hook (#34)
+- [x] Test modules added: ReputationOracle, Settlement, Discovery, Negotiation (#38)
+
 **Previously completed (v1.2.0):**
 - [x] Hardhat config with correct Arc Testnet parameters (Chain ID 5042002)
 - [x] Deploy script using real USDC on Arc Testnet
@@ -456,23 +501,11 @@ See `.env.example` for the full template. Key variables:
 - [x] Settlement service with cross-chain fund consolidation via CCTP
 - [x] Landing page with real-time stats and Arc Testnet info
 
-### Remaining Work
+### All 38 Items Complete
 
-- [ ] #21: Reputation score uses decay-factor weighted moving average
-- [ ] #24: USYC yield tracking (`yieldEarned` in redeem)
-- [ ] #27: WebSocket supports `action` field and `topics` array
-- [ ] #28: Missing WebSocket event types (`negotiation_proposed`, `task_completed`, `escrow_locked`)
-- [ ] #29: Redis config with ioredis connection (fallback to in-memory)
-- [ ] #30: `.env` variable names aligned with doc spec
-- [ ] #31-32: Database schema uses BIGINT/VARCHAR IDs matching on-chain types
-- [ ] #33: Frontend pages connected to real API (remove mock data)
-- [ ] #34: NegotiationFlow uses WebSocket hook
-- [ ] #35: Missing npm scripts (`dev:server`, `dev:client`, `dev:listener`, `db:migrate`)
-- [ ] #36: Hardhat network name `arc-testnet` (kebab-case)
-- [ ] #37: deploy.sh with full deployment steps
-- [ ] #38: Additional test modules (Settlement, Discovery, ReputationOracle, Negotiation)
+All items from the development specification audit have been implemented and verified.
 
-## Test Results (38 passing)
+## Test Results (87 passing)
 
 ```
 AgentRegistry (21 tests)
@@ -488,6 +521,30 @@ TaskEscrow (14 tests)
   - Refund: timeout, premature rejection
   - Dispute: requester, provider, third-party rejection
   - Platform Fee: setPlatformFee, max cap, owner-only
+
+ReputationOracle (12 tests)
+  - Trusted caller management: set, revoke, authorization
+  - Rating submission: valid, out-of-range, untrusted, cumulative, lastUpdated
+  - Average score: default, single, multiple ratings
+  - Rating history: track, empty
+  - Multi-agent isolation
+
+SettlementService (5 tests)
+  - Decay-factor algorithm: DECAY_FACTOR=0.95, formula verification
+  - Settlement flow: basic, USYC yield, skip yield
+
+DiscoveryService (16 tests)
+  - Smart search: all agents, matchScore, limit
+  - Filters: capability, maxPrice, minReputationScore, minSuccessRate,
+             availableOnly, language, tags, free-text search
+  - Combined filters, relevance scoring
+
+NegotiationAgent (8 tests)
+  - Proposal handling: valid, status retrieval, not-found
+  - Accept/reject: pending proposals
+  - Counter-offers: pending negotiations
+  - Field name normalization: doc-spec fields
+  - Multiple concurrent negotiations
 
 E2E Full Flow (3 tests)
   - Register -> Deposit -> Release -> Balances -> Reputation

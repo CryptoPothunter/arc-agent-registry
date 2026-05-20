@@ -1,7 +1,10 @@
 require("@nomicfoundation/hardhat-toolbox");
 require("dotenv").config();
 
-/** @type import('hardhat/config').HardhatUserConfig */
+/**
+ * #36: Network name changed from arcTestnet to arc-testnet (kebab-case per doc spec).
+ * @type import('hardhat/config').HardhatUserConfig
+ */
 module.exports = {
   solidity: {
     version: "0.8.20",
@@ -16,7 +19,7 @@ module.exports = {
     hardhat: {
       chainId: 31337,
     },
-    arcTestnet: {
+    "arc-testnet": {
       url: process.env.ARC_RPC_URL || "https://rpc.testnet.arc.network",
       chainId: 5042002,
       accounts:
@@ -28,12 +31,12 @@ module.exports = {
   },
   etherscan: {
     apiKey: {
-      arcTestnet: process.env.ARCSCAN_API_KEY || "placeholder",
+      "arc-testnet": process.env.ARCSCAN_API_KEY || "placeholder",
     },
     customChains: [
       {
-        network: "arcTestnet",
-        chainNetwork: "arcTestnet",
+        network: "arc-testnet",
+        chainNetwork: "arc-testnet",
         urls: {
           apiURL: "https://testnet.arcscan.app/api",
           browserURL: "https://testnet.arcscan.app",

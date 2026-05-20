@@ -6,6 +6,9 @@ const WS_URL = process.env.REACT_APP_WS_URL || 'ws://localhost:3001';
  * useWebSocket - manages a WebSocket connection with topic subscriptions,
  * auto-reconnect, and message handling.
  *
+ * #27: Supports both doc-spec format { action: 'subscribe', topics: [...] }
+ *      and legacy { type: 'subscribe', topic: '...' } format.
+ *
  * @param {object} options
  * @param {string[]} [options.topics] - Topics to subscribe to on connect.
  * @param {function} [options.onMessage] - Callback for incoming messages.
@@ -36,9 +39,12 @@ export default function useWebSocket({ topics = [], onMessage, autoConnect = tru
           clearTimeout(reconnectTimer.current);
           reconnectTimer.current = null;
         }
-        // Subscribe to initial topics
-        for (const topic of topicsRef.current) {
-          ws.send(JSON.stringify({ type: 'subscribe', topic }));
+        // #27: Subscribe using batch format { action, topics }
+        if (topicsRef.current.length > 0) {
+          ws.send(JSON.stringify({
+            action: 'subscribe',
+            topics: topicsRef.current,
+          }));
         }
       };
 
@@ -89,12 +95,15 @@ export default function useWebSocket({ topics = [], onMessage, autoConnect = tru
     }
   }, []);
 
-  const subscribe = useCallback((topic) => {
-    send({ type: 'subscribe', topic });
+  // #27: subscribe supports single topic or array of topics
+  const subscribe = useCallback((topicOrTopics) => {
+    const topicArray = Array.isArray(topicOrTopics) ? topicOrTopics : [topicOrTopics];
+    send({ action: 'subscribe', topics: topicArray });
   }, [send]);
 
-  const unsubscribe = useCallback((topic) => {
-    send({ type: 'unsubscribe', topic });
+  const unsubscribe = useCallback((topicOrTopics) => {
+    const topicArray = Array.isArray(topicOrTopics) ? topicOrTopics : [topicOrTopics];
+    send({ action: 'unsubscribe', topics: topicArray });
   }, [send]);
 
   useEffect(() => {

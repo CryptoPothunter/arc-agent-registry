@@ -10,6 +10,13 @@ const USYCService = require('./usyc.service');
 const GatewayService = require('./gateway.service');
 const ReputationService = require('./reputation.service');
 
+/**
+ * Decay factor for weighted moving average reputation scoring.
+ * #21: Uses DECAY_FACTOR=0.95 per doc spec instead of fixed 70/30 ratio.
+ * Formula: newScore = DECAY_FACTOR * currentScore + (1 - DECAY_FACTOR) * qualityScore
+ */
+const DECAY_FACTOR = 0.95;
+
 class SettlementService {
   constructor({ escrowService, registryService, gatewayService, reputationService } = {}) {
     this.escrow = escrowService || new EscrowService();
@@ -17,6 +24,7 @@ class SettlementService {
     this.usyc = new USYCService();
     this.gateway = gatewayService || new GatewayService();
     this.reputation = reputationService || new ReputationService();
+    this.decayFactor = DECAY_FACTOR;
   }
 
   /**
@@ -71,8 +79,9 @@ class SettlementService {
         const contractRating = Math.round(100 + (qualityScore / 100) * 400);
         const ratingResult = await this.reputation.submitRating(providerAgentId, contractRating);
 
-        // Weighted moving average: 70% existing score + 30% new quality score
-        const newScore = Math.round(currentScore * 0.7 + qualityScore * 0.3);
+        // #21: Decay-factor weighted moving average (DECAY_FACTOR=0.95)
+        // Formula: newScore = DECAY_FACTOR * currentScore + (1 - DECAY_FACTOR) * qualityScore
+        const newScore = Math.round(this.decayFactor * currentScore + (1 - this.decayFactor) * qualityScore);
 
         steps.push({
           step: 'reputation_update',

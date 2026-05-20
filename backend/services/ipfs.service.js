@@ -1,6 +1,8 @@
 /**
  * IPFS Service - handles metadata upload and retrieval.
  * Uses Pinata for production, local file storage for development.
+ * #30: Supports doc-spec variable names (IPFS_API_URL, IPFS_PROJECT_ID, IPFS_PROJECT_SECRET)
+ *      with fallback to legacy Pinata variables.
  */
 
 const fs = require('fs');
@@ -8,9 +10,11 @@ const path = require('path');
 const crypto = require('crypto');
 
 const IPFS_GATEWAY = process.env.IPFS_GATEWAY || 'https://gateway.pinata.cloud/ipfs/';
-const PINATA_API_KEY = process.env.PINATA_API_KEY || '';
-const PINATA_SECRET = process.env.PINATA_SECRET || '';
-const PINATA_ENDPOINT = 'https://api.pinata.cloud/pinning/pinJSONToIPFS';
+// #30: Doc-spec IPFS variables with legacy Pinata fallback
+const IPFS_API_URL = process.env.IPFS_API_URL || 'https://api.pinata.cloud';
+const IPFS_PROJECT_ID = process.env.IPFS_PROJECT_ID || process.env.PINATA_API_KEY || '';
+const IPFS_PROJECT_SECRET = process.env.IPFS_PROJECT_SECRET || process.env.PINATA_SECRET || '';
+const PINATA_ENDPOINT = `${IPFS_API_URL}/pinning/pinJSONToIPFS`;
 
 // Local storage directory for dev mode
 const LOCAL_IPFS_DIR = path.join(__dirname, '..', '.ipfs-local');
@@ -22,7 +26,7 @@ const LOCAL_IPFS_DIR = path.join(__dirname, '..', '.ipfs-local');
  * @returns {Promise<string>} The IPFS CID (content identifier).
  */
 async function uploadToIPFS(metadata) {
-  if (!PINATA_API_KEY || !PINATA_SECRET) {
+  if (!IPFS_PROJECT_ID || !IPFS_PROJECT_SECRET) {
     return _localUpload(metadata);
   }
 
@@ -31,8 +35,8 @@ async function uploadToIPFS(metadata) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        pinata_api_key: PINATA_API_KEY,
-        pinata_secret_api_key: PINATA_SECRET,
+        pinata_api_key: IPFS_PROJECT_ID,
+        pinata_secret_api_key: IPFS_PROJECT_SECRET,
       },
       body: JSON.stringify({
         pinataContent: metadata,

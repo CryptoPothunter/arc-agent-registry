@@ -7,10 +7,10 @@
 const { ethers } = require('ethers');
 
 const USYC_CONTRACT = process.env.USYC_CONTRACT || '0xe9185F0c5F296Ed1797AaE4238D26CCaBEadb86C';
-const USDC_CONTRACT = process.env.USDC_CONTRACT || '0x3600000000000000000000000000000000000000';
+const USDC_CONTRACT = process.env.USDC_ADDRESS || process.env.USDC_CONTRACT || '0x3600000000000000000000000000000000000000';
 const TELLER_CONTRACT = process.env.TELLER_ADDRESS || '0x9fdF14c5B14173D74C08Af27AebFf39240dC105A';
 const ENTITLEMENTS_CONTRACT = process.env.ENTITLEMENTS_ADDRESS || '0xcc205224862c7641930c87679e98999d23c26113';
-const RPC_URL = process.env.RPC_URL || 'https://rpc.testnet.arc.network';
+const RPC_URL = process.env.ARC_RPC_URL || process.env.RPC_URL || 'https://rpc.testnet.arc.network';
 
 const ERC20_ABI = require('../abis/ERC20.json');
 
@@ -125,11 +125,17 @@ class USYCService {
 
       console.log(`[USYC] Redeem confirmed: tx ${receipt.hash}`);
 
+      // #24: Calculate yieldEarned = expectedUsdcReceived - shares (original deposit)
+      const expectedUsdcStr = ethers.formatUnits(expectedAssets, 6);
+      const sharesStr = String(shares);
+      const yieldEarned = (parseFloat(expectedUsdcStr) - parseFloat(sharesStr)).toFixed(6);
+
       return {
         redeemed: true,
         txHash: receipt.hash,
         usycShares: shares,
-        expectedUsdcReceived: ethers.formatUnits(expectedAssets, 6),
+        expectedUsdcReceived: expectedUsdcStr,
+        yieldEarned,
         gasUsed: receipt.gasUsed.toString(),
         explorerUrl: `https://testnet.arcscan.app/tx/${receipt.hash}`,
       };

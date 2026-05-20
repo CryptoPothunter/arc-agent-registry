@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { getNegotiationStatus, respondToNegotiation, depositEscrow } from '../services/api';
+import useWebSocket from '../hooks/useWebSocket';
 
 export default function NegotiationFlow({ taskId, negotiationId, onEscrowLock }) {
   const [rounds, setRounds] = useState([]);
@@ -68,41 +69,18 @@ export default function NegotiationFlow({ taskId, negotiationId, onEscrowLock })
     };
   }, [fetchStatus, isNegotiating, effectiveNegId]);
 
-  // WebSocket for real-time updates
+  // #34: Use useWebSocket hook instead of inline WebSocket
+  const { lastMessage: wsMessage } = useWebSocket({
+    topics: effectiveNegId ? [`agent:requester:negotiation`] : [],
+    autoConnect: !!effectiveNegId,
+  });
+
+  // Refresh when we get a WebSocket message for this negotiation
   useEffect(() => {
-    if (!effectiveNegId) return;
-
-    const wsUrl = process.env.REACT_APP_WS_URL || 'ws://localhost:3001';
-    let ws;
-    try {
-      ws = new WebSocket(wsUrl);
-      ws.onopen = () => {
-        ws.send(JSON.stringify({
-          type: 'subscribe',
-          topic: `agent:requester:negotiation`,
-        }));
-      };
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.negotiationId === effectiveNegId) {
-            // Refresh on any negotiation event
-            fetchStatus();
-          }
-        } catch {
-          // ignore parse errors
-        }
-      };
-    } catch {
-      // WebSocket not available, fall back to polling only
+    if (wsMessage && wsMessage.negotiationId === effectiveNegId) {
+      fetchStatus();
     }
-
-    return () => {
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.close();
-      }
-    };
-  }, [effectiveNegId, fetchStatus]);
+  }, [wsMessage, effectiveNegId, fetchStatus]);
 
   // Handle counter-offer submission
   const handleCounter = async () => {
