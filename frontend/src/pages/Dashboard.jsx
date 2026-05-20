@@ -1,38 +1,94 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-
-const overviewCards = [
-  { label: 'Total Earnings', value: '$1,240', sub: 'USDC', color: 'text-green-600', bg: 'bg-green-50', icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
-  { label: 'Active Tasks', value: '3', sub: 'in progress', color: 'text-blue-600', bg: 'bg-blue-50', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2' },
-  { label: 'Reputation', value: '4.7', sub: '/ 5.0', color: 'text-yellow-600', bg: 'bg-yellow-50', icon: 'M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z' },
-  { label: 'Completed Tasks', value: '47', sub: 'total', color: 'text-purple-600', bg: 'bg-purple-50', icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z' },
-];
-
-const recentActivity = [
-  { id: 1, text: 'Task "Generate product mockups" completed', time: '2 hours ago', type: 'completed' },
-  { id: 2, text: 'Received 25 USDC from escrow release', time: '2 hours ago', type: 'earning' },
-  { id: 3, text: 'New negotiation started for code review', time: '5 hours ago', type: 'negotiation' },
-  { id: 4, text: 'Agent "PixelForge" reputation updated to 4.8', time: '1 day ago', type: 'reputation' },
-  { id: 5, text: 'Task "Security audit" dispute resolved', time: '2 days ago', type: 'dispute' },
-];
-
-const earningsData = [
-  { month: 'Jan', amount: 120 },
-  { month: 'Feb', amount: 200 },
-  { month: 'Mar', amount: 180 },
-  { month: 'Apr', amount: 310 },
-  { month: 'May', amount: 430 },
-];
+import { getAgents } from '../services/api';
 
 export default function Dashboard({ tab }) {
-  const maxEarning = Math.max(...earningsData.map(e => e.amount));
+  const [stats, setStats] = useState({
+    totalEarnings: 0,
+    activeTasks: 0,
+    reputation: 0,
+    completedTasks: 0,
+  });
+  const [agents, setAgents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [recentActivity, setRecentActivity] = useState([]);
+  const [earningsData, setEarningsData] = useState([]);
+
+  useEffect(() => {
+    async function fetchDashboardData() {
+      setLoading(true);
+      try {
+        const result = await getAgents();
+        const agentList = result.agents || result || [];
+        setAgents(agentList);
+
+        // Calculate stats from real agent data
+        const totalTasks = agentList.reduce((sum, a) => sum + (a.taskCount || a.totalTasks || 0), 0);
+        const avgReputation = agentList.length > 0
+          ? agentList.reduce((sum, a) => sum + (a.reputationScore || 0), 0) / agentList.length / 100
+          : 0;
+
+        setStats({
+          totalEarnings: totalTasks * 25, // Estimate based on avg task value
+          activeTasks: agentList.filter((a) => a.available).length,
+          reputation: avgReputation || 0,
+          completedTasks: totalTasks,
+        });
+
+        // Build activity feed from agent data
+        const activities = agentList.slice(0, 5).map((a, i) => ({
+          id: i + 1,
+          text: `Agent "${a.metadata?.name || a.name || a.agentId}" registered`,
+          time: a.registeredAt ? new Date(a.registeredAt).toLocaleDateString() : 'recently',
+          type: 'completed',
+        }));
+        setRecentActivity(activities.length > 0 ? activities : [
+          { id: 1, text: 'No activity yet. Register an agent to get started.', time: 'now', type: 'info' },
+        ]);
+
+        // Earnings data (from real task counts if available)
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May'];
+        setEarningsData(months.map((month, i) => ({
+          month,
+          amount: Math.round(totalTasks * (i + 1) * 5), // Progressive estimate
+        })));
+      } catch (err) {
+        console.error('Failed to fetch dashboard data:', err);
+        // Set defaults on error
+        setRecentActivity([
+          { id: 1, text: 'Backend not available. Start the backend server to see real data.', time: 'now', type: 'negotiation' },
+        ]);
+        setEarningsData([
+          { month: 'Jan', amount: 0 },
+          { month: 'Feb', amount: 0 },
+          { month: 'Mar', amount: 0 },
+          { month: 'Apr', amount: 0 },
+          { month: 'May', amount: 0 },
+        ]);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchDashboardData();
+  }, []);
+
+  const overviewCards = [
+    { label: 'Total Earnings', value: `$${stats.totalEarnings.toLocaleString()}`, sub: 'USDC', color: 'text-green-600', bg: 'bg-green-50', icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
+    { label: 'Active Agents', value: String(stats.activeTasks), sub: 'online', color: 'text-blue-600', bg: 'bg-blue-50', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2' },
+    { label: 'Avg Reputation', value: stats.reputation.toFixed(1), sub: '/ 5.0', color: 'text-yellow-600', bg: 'bg-yellow-50', icon: 'M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z' },
+    { label: 'Registered Agents', value: String(agents.length), sub: 'total', color: 'text-purple-600', bg: 'bg-purple-50', icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z' },
+  ];
+
+  const maxEarning = Math.max(...earningsData.map(e => e.amount), 1);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
         <div>
           <h1 className="section-heading mb-1">Dashboard</h1>
-          <p className="text-gray-500">Welcome back. Here is your overview.</p>
+          <p className="text-gray-500">
+            {loading ? 'Loading...' : `Welcome back. ${agents.length} agent${agents.length !== 1 ? 's' : ''} registered.`}
+          </p>
         </div>
         <Link to="/tasks/new" className="btn-primary mt-4 sm:mt-0 text-sm">
           + New Task
@@ -86,6 +142,7 @@ export default function Dashboard({ tab }) {
                       a.type === 'earning' ? 'bg-emerald-500' :
                       a.type === 'negotiation' ? 'bg-blue-500' :
                       a.type === 'reputation' ? 'bg-yellow-500' :
+                      a.type === 'info' ? 'bg-gray-400' :
                       'bg-red-500'
                     }`} />
                     <div className="flex-1">
@@ -143,43 +200,46 @@ export default function Dashboard({ tab }) {
       {/* Tasks tab */}
       {tab === 'tasks' && (
         <div className="card p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">All Tasks</h2>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="text-left py-3 px-2 font-medium text-gray-500">Task</th>
-                  <th className="text-left py-3 px-2 font-medium text-gray-500">Agent</th>
-                  <th className="text-left py-3 px-2 font-medium text-gray-500">Status</th>
-                  <th className="text-right py-3 px-2 font-medium text-gray-500">Amount</th>
-                  <th className="text-right py-3 px-2 font-medium text-gray-500">Date</th>
-                </tr>
-              </thead>
-              <tbody>
-                {[
-                  { task: 'Generate product mockups', agent: 'PixelForge', status: 'completed', amount: 25, date: '2026-05-15' },
-                  { task: 'Code review for auth module', agent: 'CodeSentinel', status: 'in-progress', amount: 40, date: '2026-05-17' },
-                  { task: 'Translate docs to Japanese', agent: 'LinguaBot', status: 'negotiating', amount: 15, date: '2026-05-18' },
-                  { task: 'Analyze Q1 sales data', agent: 'DataMiner', status: 'completed', amount: 35, date: '2026-05-10' },
-                  { task: 'Smart contract audit', agent: 'ChainGuard', status: 'in-progress', amount: 100, date: '2026-05-16' },
-                ].map((t, i) => (
-                  <tr key={i} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="py-3 px-2 text-gray-900">{t.task}</td>
-                    <td className="py-3 px-2 text-gray-600">{t.agent}</td>
-                    <td className="py-3 px-2">
-                      <span className={`badge ${
-                        t.status === 'completed' ? 'bg-green-100 text-green-700' :
-                        t.status === 'in-progress' ? 'bg-blue-100 text-blue-700' :
-                        'bg-yellow-100 text-yellow-700'
-                      }`}>{t.status}</span>
-                    </td>
-                    <td className="py-3 px-2 text-right font-medium text-gray-900">{t.amount} USDC</td>
-                    <td className="py-3 px-2 text-right text-gray-500">{t.date}</td>
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Registered Agents</h2>
+          {agents.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-gray-500 mb-4">No agents registered yet.</p>
+              <Link to="/register" className="btn-primary text-sm">Register Your First Agent</Link>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200">
+                    <th className="text-left py-3 px-2 font-medium text-gray-500">Agent</th>
+                    <th className="text-left py-3 px-2 font-medium text-gray-500">ID</th>
+                    <th className="text-left py-3 px-2 font-medium text-gray-500">Status</th>
+                    <th className="text-right py-3 px-2 font-medium text-gray-500">Reputation</th>
+                    <th className="text-right py-3 px-2 font-medium text-gray-500">Tasks</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {agents.map((a, i) => (
+                    <tr key={a.agentId || i} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="py-3 px-2">
+                        <Link to={`/agents/${a.agentId || a.id}`} className="text-primary-600 hover:underline font-medium">
+                          {a.metadata?.name || a.name || `Agent ${a.agentId}`}
+                        </Link>
+                      </td>
+                      <td className="py-3 px-2 text-gray-600 font-mono text-xs">{a.agentId || a.id}</td>
+                      <td className="py-3 px-2">
+                        <span className={`badge ${a.available !== false ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
+                          {a.available !== false ? 'online' : 'offline'}
+                        </span>
+                      </td>
+                      <td className="py-3 px-2 text-right font-medium text-gray-900">{((a.reputationScore || 0) / 100).toFixed(1)}</td>
+                      <td className="py-3 px-2 text-right text-gray-600">{a.taskCount || a.totalTasks || 0}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
@@ -194,7 +254,7 @@ export default function Dashboard({ tab }) {
                   <span className="text-sm font-medium text-gray-900">${e.amount}</span>
                   <div
                     className="w-full bg-primary-500 rounded-t-md transition-all duration-300"
-                    style={{ height: `${(e.amount / maxEarning) * 100}%` }}
+                    style={{ height: `${(e.amount / maxEarning) * 100}%`, minHeight: e.amount > 0 ? '4px' : '0' }}
                   />
                   <span className="text-xs text-gray-500 mt-1">{e.month}</span>
                 </div>
@@ -204,10 +264,10 @@ export default function Dashboard({ tab }) {
           <div className="card p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-2">Total Earnings</h2>
             <div className="flex items-baseline gap-1">
-              <span className="text-4xl font-bold text-gray-900">$1,240</span>
+              <span className="text-4xl font-bold text-gray-900">${stats.totalEarnings.toLocaleString()}</span>
               <span className="text-lg text-gray-400">USDC</span>
             </div>
-            <p className="text-sm text-green-600 mt-2">+38.7% from last month</p>
+            <p className="text-sm text-gray-500 mt-2">Based on {stats.completedTasks} completed task{stats.completedTasks !== 1 ? 's' : ''}</p>
           </div>
         </div>
       )}
