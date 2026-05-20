@@ -2,7 +2,7 @@
 
 > AI Agent Discovery, Negotiation & Settlement Protocol on Arc
 
-**Version** v2.0.0 · **Chain** Arc Testnet (Chain ID: 5042002) · **Settlement Currency** USDC
+**Version** v2.1.0 · **Chain** Arc Testnet (Chain ID: 5042002) · **Settlement Currency** USDC
 
 ## Overview
 
@@ -35,6 +35,15 @@
 | Entitlements | `0xcc205224862c7641930c87679e98999d23c26113` |
 | Teller | `0x9fdF14c5B14173D74C08Af27AebFf39240dC105A` |
 | FxEscrow | `0x867650F5eAe8df91445971f14d89fd84F0C9a9f8` |
+
+### Arc Native Agent Contracts (ERC-8004 + ERC-8183)
+
+| Contract | Standard | Address |
+|----------|----------|---------|
+| IdentityRegistry | ERC-8004 | `0x8004A818BFB912233c491871b3d84c89A494BD9e` |
+| ReputationRegistry | ERC-8004 | `0x8004B663056A597Dffe9eCcC1965A193B7388713` |
+| ValidationRegistry | ERC-8004 | `0x8004Cb1BF31DAf7788923b405b754f57acEB4272` |
+| AgenticCommerce | ERC-8183 | `0x0747EEf0706327138c69792bF28Cd525089e4583` |
 
 ### Our Deployed Contracts on Arc Testnet
 
@@ -72,6 +81,7 @@
 | - Discovery      |     | - NegotiatorAgent |
 | - Negotiation    |     | - ValidatorAgent  |
 | - Escrow         |     +-------------------+
+| - Arc Identity   |
 +--------+---------+
          |
 +--------v---------+     +-------------------+
@@ -79,8 +89,9 @@
 | - AgentRegistry  |<--->| - Wallets         |
 | - TaskEscrow     |     | - Gateway (CCTP)  |
 | - ReputationOracle|    | - Paymaster       |
-+------------------+     | - USYC Yield      |
-                          +-------------------+
+| - ERC-8004 (ID)  |     | - USYC Yield      |
+| - ERC-8183 (Jobs)|     +-------------------+
++------------------+
 ```
 
 ---
@@ -100,7 +111,8 @@
 - **Dynamic Pricing Engine** -- Market-aware pricing with supply/demand signals, complexity multipliers, sigmoid conversion probability, and percentile-based price ranges.
 - **Signature Verification** -- EIP-191 signature authentication middleware for all write endpoints.
 - **Circle Stack Integration** -- Wallets (on-chain balance queries), Gateway (CCTP cross-chain transfers), Paymaster (USDC gas sponsorship), and USYC yield on escrowed funds with yield tracking.
-- **Arc Native Identity** -- ERC-8004 IdentityRegistry and ERC-8183 AgenticCommerce integration for on-chain agent identity and job management.
+- **Arc Native Identity** -- Full ERC-8004 integration with IdentityRegistry (agent registration as NFT), ReputationRegistry (giveFeedback with score/type/tag), and ValidationRegistry (validationRequest/validationResponse/getValidationStatus). Complete 7-step identity workflow: register -> retrieve ID -> record reputation -> request validation -> submit response -> verify status.
+- **ERC-8183 Job Settlement** -- Full AgenticCommerce lifecycle: createJob -> setBudget -> fund (with USDC approval) -> submitDeliverable (provider submits bytes32 hash) -> completeJob/rejectDeliverable. Job states: Open, Funded, Submitted, Completed, Rejected, Expired. Cross-registration with custom AgentRegistry.
 - **Identity Passports** -- Cross-chain agent identity passports with eligibility checks, minting, verification, and revocation.
 - **AI Agent Roles** -- DeepSeek V4 powered MatchAgent, NegotiatorAgent, ValidatorAgent, AutonomousPricingAgent, MarketMakerAgent, OrchestratorAgent with structured prompt engineering and local fallback heuristics.
 - **Real-time WebSocket** -- Batch topic subscription (`action`/`topics` format), all event types supported (negotiation_proposed, task_completed, escrow_locked, etc.).
@@ -257,6 +269,27 @@ DAG-based task orchestration contract. Complex tasks are decomposed into depende
 | GET | `/api/stats/live` | Get real-time stats with delta changes |
 | POST | `/api/faucet/claim` | Claim 10 testnet USDC (24h rate limit) |
 | GET | `/api/faucet/status/:walletAddress` | Check faucet claim status |
+
+### Arc Native Protocol (ERC-8004 + ERC-8183)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/arc/identity/register` | Register agent on ERC-8004 IdentityRegistry |
+| GET | `/api/arc/identity/:agentId` | Get agent identity from ERC-8004 |
+| PUT | `/api/arc/identity/:agentId/metadata` | Update agent metadata on ERC-8004 |
+| POST | `/api/arc/reputation/feedback` | Record reputation on ReputationRegistry |
+| POST | `/api/arc/validation/request` | Request validation on ValidationRegistry |
+| POST | `/api/arc/validation/respond` | Submit validation response |
+| GET | `/api/arc/validation/:requestHash` | Get validation status |
+| POST | `/api/arc/jobs` | Create ERC-8183 job |
+| POST | `/api/arc/jobs/:jobId/budget` | Set job budget (provider) |
+| POST | `/api/arc/jobs/:jobId/fund` | Fund job escrow with USDC (client) |
+| POST | `/api/arc/jobs/:jobId/submit` | Submit deliverable (provider) |
+| POST | `/api/arc/jobs/:jobId/complete` | Complete job (evaluator) |
+| POST | `/api/arc/jobs/:jobId/reject` | Reject deliverable (evaluator) |
+| GET | `/api/arc/jobs/:jobId` | Get job details |
+| POST | `/api/arc/demo/identity-workflow` | Run full 7-step ERC-8004 demo |
+| POST | `/api/arc/demo/job-lifecycle` | Run full ERC-8183 lifecycle demo |
 
 ### WebSocket
 
@@ -419,7 +452,8 @@ arc-agent-registry/
 │   │   ├── private-intent.routes.js #  /api/intent/*
 │   │   ├── agent-intelligence.routes.js # /api/ai/*
 │   │   ├── traction-stats.routes.js #  /api/stats/*
-│   │   └── faucet.routes.js      #   /api/faucet/*
+│   │   ├── faucet.routes.js      #   /api/faucet/*
+│   │   └── erc8183-jobs.routes.js #  /api/arc/* (ERC-8004/8183)
 │   ├── services/
 │   │   ├── registry.service.js   #   Agent registration & query
 │   │   ├── discovery.service.js  #   AI-powered agent matching
@@ -468,7 +502,8 @@ arc-agent-registry/
 │   │   │   ├── Dashboard.jsx     #   Agent management
 │   │   │   ├── AgentDetail.jsx   #   Agent profile
 │   │   │   ├── NewTask.jsx       #   Task creation
-│   │   │   └── TaskDetail.jsx    #   Task detail + escrow
+│   │   │   ├── TaskDetail.jsx    #   Task detail + escrow
+│   │   │   └── ArcJobs.jsx       #   Arc Protocol (ERC-8004/8183)
 │   │   ├── components/
 │   │   │   ├── Layout.jsx        #   Navigation & wrapper
 │   │   │   ├── AgentCard.jsx     #   Agent listing card
@@ -581,9 +616,9 @@ See `.env.example` for the full template. Key variables:
 
 ## Development Progress
 
-### Completed (v2.0.0)
+### Completed (v2.1.0)
 
-**Smart Contracts (6 contracts deployed to Arc Testnet):**
+**Smart Contracts (6 custom contracts deployed + 4 Arc native contracts integrated):**
 - [x] `AgentRegistry.sol` — Agent registration, capability indexing, trust management
 - [x] `TaskEscrow.sol` — USDC escrow with adjustable platform fee (0.5% default)
 - [x] `ReputationOracle.sol` — Cumulative reputation scoring with rating history
@@ -592,14 +627,21 @@ See `.env.example` for the full template. Key variables:
 - [x] `AgentPipeline.sol` — DAG-based task pipeline orchestration
 - [x] All contracts deployed and verified on Arc Testnet (Chain ID 5042002)
 - [x] Trust relationships established between contracts
+- [x] ERC-8004 IdentityRegistry — Agent identity as NFT, register(metadataURI)
+- [x] ERC-8004 ReputationRegistry — giveFeedback(agentId, score, feedbackType, tag, feedbackHash)
+- [x] ERC-8004 ValidationRegistry — validationRequest/validationResponse/getValidationStatus
+- [x] ERC-8183 AgenticCommerce — Full job lifecycle (create/setBudget/fund/submit/complete/reject)
 
-**Backend (12 route modules, 16 services, 8 AI agents):**
+**Backend (13 route modules, 16 services, 8 AI agents):**
 - [x] Core routes: registry, discovery, negotiation, escrow, settlement
 - [x] Extended routes: fund, pipeline, market-data, private-intent, agent-intelligence, traction-stats, faucet
+- [x] Arc native routes: /api/arc/* (ERC-8004 identity, reputation, validation + ERC-8183 jobs)
 - [x] Core services: registry, discovery, escrow, settlement, reputation, IPFS
-- [x] Circle services: wallet, gateway (CCTP V2, domain 26), paymaster, USYC yield
-- [x] Extended services: dynamic-pricing, nanopayment-betting, yielding-escrow, identity-passport, arc-native-identity, private-intent
+- [x] Circle services: wallet, gateway (CCTP V2 + GatewayWallet/GatewayMinter + receiveMessage), paymaster, USYC yield
+- [x] Extended services: dynamic-pricing, nanopayment-betting, yielding-escrow, identity-passport, arc-native-identity (full ERC-8004 + ERC-8183), private-intent
 - [x] AI agents: mulerun client, negotiation, real-negotiation (Bayesian), autonomous-pricing, market-maker (Kelly), orchestrator (DAG)
+- [x] Registry cross-registration on ERC-8004 IdentityRegistry (non-blocking)
+- [x] CCTP V2 complete: depositForBurn + Circle attestation polling + receiveMessage
 - [x] Pipeline decompose endpoint connected to OrchestratorAgent (DeepSeek AI with fallback)
 - [x] Private intent matching connected to DiscoveryService (real agent registry lookup)
 - [x] Negotiation status endpoint returns full history array for frontend compatibility
@@ -608,7 +650,7 @@ See `.env.example` for the full template. Key variables:
 - [x] Redis caching with in-memory fallback
 - [x] WebSocket real-time events with topic subscriptions
 
-**Frontend (7 pages, 6 components, 30+ API functions):**
+**Frontend (8 pages, 6 components, 45+ API functions):**
 - [x] All pages connected to backend API with loading/error states
 - [x] WebSocket integration for real-time updates
 - [x] Agent registration wizard (4-step)
@@ -616,8 +658,8 @@ See `.env.example` for the full template. Key variables:
 - [x] Negotiation flow with counter-offers and provider address resolution
 - [x] Escrow status visualization
 - [x] Dashboard with stats, tasks, and earnings tabs
-- [x] API client covers all 30+ backend endpoints (fund, pipeline, market, intent, AI, stats, faucet)
-- [x] Footer resource links point to GitHub repository
+- [x] Arc Protocol page — ERC-8183 job creation, job actions, demo workflows (identity + job lifecycle)
+- [x] API client covers all 45+ backend endpoints (including Arc native protocol)
 
 **Tests (216 passing):**
 - [x] AgentRegistry — 21 tests (registration, search, reputation, access control)
