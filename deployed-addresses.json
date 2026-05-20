@@ -17,6 +17,16 @@
     "ERC8004_ValidationRegistry": "0x8004Cb1BF31DAf7788923b405b754f57acEB4272",
     "ERC8183_AgenticCommerce": "0x0747EEf0706327138c69792bF28Cd525089e4583"
   },
+  "cctpContracts": {
+    "domain": 26,
+    "TokenMessengerV2": "0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA",
+    "MessageTransmitterV2": "0xE737e5cEBEEBa77EFE34D4aa090756590b1CE275",
+    "TokenMinterV2": "0xb43db544E2c27092c107639Ad201b3dEfAbcF192"
+  },
+  "gatewayContracts": {
+    "GatewayWallet": "0x0077777d7EBA4688BDeF3E311b846F25870A19B9",
+    "GatewayMinter": "0x0022222ABE238Cc2C7Bb1f21003F0a260052475B"
+  },
   "arcTestnetInfo": {
     "rpc": "https://rpc.testnet.arc.network",
     "wss": "wss://rpc.testnet.arc.network",

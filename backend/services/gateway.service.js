@@ -13,7 +13,9 @@ const SUPPORTED_CHAINS = {
     usdc: process.env.USDC_ADDRESS || '0x3600000000000000000000000000000000000000',
     eurc: process.env.EURC_ADDRESS || '0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a',
     explorer: 'https://testnet.arcscan.app',
-    cctpDomain: 0, // CCTP domain identifier for Arc
+    cctpDomain: 26, // Arc Testnet CCTP domain
+    tokenMessenger: '0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA',
+    messageTransmitter: '0xE737e5cEBEEBa77EFE34D4aa090756590b1CE275',
   },
   'ETH-SEPOLIA': {
     rpcUrl: process.env.ETH_SEPOLIA_RPC || 'https://rpc.sepolia.org',
@@ -191,7 +193,7 @@ class GatewayService {
 
     // Step 1: Approve TokenMessenger to spend USDC
     const usdc = new ethers.Contract(sourceConfig.usdc, ERC20_ABI, signer);
-    const tokenMessengerAddress = process.env.CCTP_TOKEN_MESSENGER || ethers.ZeroAddress;
+    const tokenMessengerAddress = process.env.CCTP_TOKEN_MESSENGER || sourceConfig.tokenMessenger || ethers.ZeroAddress;
 
     if (tokenMessengerAddress === ethers.ZeroAddress) {
       // No CCTP TokenMessenger configured - simulate the transfer
