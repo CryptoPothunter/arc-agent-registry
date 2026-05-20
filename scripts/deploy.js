@@ -14,13 +14,11 @@ async function main() {
 
   // Determine USDC address based on network
   let usdcAddress;
-  if (networkName === "arcTestnet") {
-    // Arc Testnet uses native USDC at this pre-deployed address
+  if (networkName === "arc-testnet") {
     usdcAddress = process.env.USDC_ADDRESS || "0x3600000000000000000000000000000000000000";
     console.log("\n--- Using Arc Testnet USDC ---");
     console.log("USDC address:", usdcAddress);
   } else {
-    // Local / Hardhat: deploy MockUSDC
     console.log("\n--- Deploying MockUSDC (local network) ---");
     const MockUSDC = await hre.ethers.getContractFactory("MockUSDC");
     const mockUsdc = await MockUSDC.deploy();
@@ -53,33 +51,76 @@ async function main() {
   const taskEscrowAddress = await taskEscrow.getAddress();
   console.log("TaskEscrow deployed to:", taskEscrowAddress);
 
-  // 4. Set trust relationships
+  // 4. Deploy AgentReputationMarket
+  console.log("\n--- Deploying AgentReputationMarket ---");
+  const AgentReputationMarket = await hre.ethers.getContractFactory("AgentReputationMarket");
+  const reputationMarket = await AgentReputationMarket.deploy(usdcAddress, agentRegistryAddress);
+  await reputationMarket.waitForDeployment();
+  const reputationMarketAddress = await reputationMarket.getAddress();
+  console.log("AgentReputationMarket deployed to:", reputationMarketAddress);
+
+  // 5. Deploy AgentPipeline
+  console.log("\n--- Deploying AgentPipeline ---");
+  const AgentPipeline = await hre.ethers.getContractFactory("AgentPipeline");
+  const agentPipeline = await AgentPipeline.deploy(usdcAddress, agentRegistryAddress);
+  await agentPipeline.waitForDeployment();
+  const agentPipelineAddress = await agentPipeline.getAddress();
+  console.log("AgentPipeline deployed to:", agentPipelineAddress);
+
+  // 6. Deploy AgentFund
+  console.log("\n--- Deploying AgentFund ---");
+  const AgentFund = await hre.ethers.getContractFactory("AgentFund");
+  const agentFund = await AgentFund.deploy(usdcAddress, agentRegistryAddress);
+  await agentFund.waitForDeployment();
+  const agentFundAddress = await agentFund.getAddress();
+  console.log("AgentFund deployed to:", agentFundAddress);
+
+  // 7. Set trust relationships
   console.log("\n--- Setting trust relationships ---");
 
   const tx1 = await agentRegistry.setTrustedContract(taskEscrowAddress, true);
   await tx1.wait();
   console.log("AgentRegistry: TaskEscrow set as trusted contract");
 
-  const tx2 = await reputationOracle.setTrustedCaller(deployer.address, true);
+  const tx2 = await reputationOracle.setTrusted(deployer.address, true);
   await tx2.wait();
-  console.log("ReputationOracle: Deployer set as trusted caller");
+  console.log("ReputationOracle: Deployer set as trusted");
 
-  const tx3 = await reputationOracle.setTrustedCaller(taskEscrowAddress, true);
+  const tx3 = await reputationOracle.setTrusted(taskEscrowAddress, true);
   await tx3.wait();
-  console.log("ReputationOracle: TaskEscrow set as trusted caller");
+  console.log("ReputationOracle: TaskEscrow set as trusted");
 
-  // 5. Write deployed addresses to JSON
+  // Set escrow on reputation market
+  const tx4 = await reputationMarket.setEscrow(taskEscrowAddress);
+  await tx4.wait();
+  console.log("AgentReputationMarket: TaskEscrow set as escrow");
+
+  // Set escrow on agent fund
+  const tx5 = await agentFund.setEscrow(taskEscrowAddress);
+  await tx5.wait();
+  console.log("AgentFund: TaskEscrow set as escrow");
+
+  // 8. Write deployed addresses to JSON
   const addresses = {
     network: networkName,
-    chainId: networkName === "arcTestnet" ? 5042002 : 31337,
+    chainId: networkName === "arc-testnet" ? 5042002 : 31337,
     deployer: deployer.address,
     contracts: {
+      USDC: usdcAddress,
       ReputationOracle: reputationOracleAddress,
       AgentRegistry: agentRegistryAddress,
-      USDC: usdcAddress,
       TaskEscrow: taskEscrowAddress,
+      AgentReputationMarket: reputationMarketAddress,
+      AgentPipeline: agentPipelineAddress,
+      AgentFund: agentFundAddress,
     },
-    arcTestnetInfo: networkName === "arcTestnet" ? {
+    arcNativeContracts: {
+      ERC8004_IdentityRegistry: "0x8004A818BFB912233c491871b3d84c89A494BD9e",
+      ERC8004_ReputationRegistry: "0x8004B663056A597Dffe9eCcC1965A193B7388713",
+      ERC8004_ValidationRegistry: "0x8004Cb1BF31DAf7788923b405b754f57acEB4272",
+      ERC8183_AgenticCommerce: "0x0747EEf0706327138c69792bF28Cd525089e4583",
+    },
+    arcTestnetInfo: networkName === "arc-testnet" ? {
       rpc: "https://rpc.testnet.arc.network",
       wss: "wss://rpc.testnet.arc.network",
       explorer: "https://testnet.arcscan.app",
@@ -93,6 +134,30 @@ async function main() {
   fs.writeFileSync(outputPath, JSON.stringify(addresses, null, 2));
   console.log("\nDeployed addresses written to:", outputPath);
   console.log(JSON.stringify(addresses, null, 2));
+
+  // Update .env file with new contract addresses
+  const envPath = path.join(__dirname, "..", ".env");
+  if (fs.existsSync(envPath)) {
+    let envContent = fs.readFileSync(envPath, "utf8");
+    const replacements = {
+      REGISTRY_CONTRACT: agentRegistryAddress,
+      ESCROW_CONTRACT: taskEscrowAddress,
+      REPUTATION_CONTRACT: reputationOracleAddress,
+      REPUTATION_MARKET_CONTRACT: reputationMarketAddress,
+      PIPELINE_CONTRACT: agentPipelineAddress,
+      AGENT_FUND_CONTRACT: agentFundAddress,
+    };
+    for (const [key, value] of Object.entries(replacements)) {
+      const regex = new RegExp(`^${key}=.*$`, "m");
+      if (envContent.match(regex)) {
+        envContent = envContent.replace(regex, `${key}=${value}`);
+      } else {
+        envContent += `\n${key}=${value}`;
+      }
+    }
+    fs.writeFileSync(envPath, envContent);
+    console.log("\n.env updated with deployed contract addresses");
+  }
 }
 
 main()
