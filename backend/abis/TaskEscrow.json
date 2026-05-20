@@ -57,7 +57,7 @@
         "type": "bytes32"
       },
       {
-        "indexed": true,
+        "indexed": false,
         "internalType": "address",
         "name": "raisedBy",
         "type": "address"
@@ -76,13 +76,13 @@
         "type": "bytes32"
       },
       {
-        "indexed": true,
+        "indexed": false,
         "internalType": "address",
         "name": "requester",
         "type": "address"
       },
       {
-        "indexed": true,
+        "indexed": false,
         "internalType": "address",
         "name": "provider",
         "type": "address"
@@ -105,18 +105,6 @@
         "internalType": "bytes32",
         "name": "taskId",
         "type": "bytes32"
-      },
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "requester",
-        "type": "address"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "amount",
-        "type": "uint256"
       }
     ],
     "name": "FundsRefunded",
@@ -130,12 +118,6 @@
         "internalType": "bytes32",
         "name": "taskId",
         "type": "bytes32"
-      },
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "provider",
-        "type": "address"
       },
       {
         "indexed": false,
@@ -311,6 +293,19 @@
   {
     "inputs": [
       {
+        "internalType": "uint256",
+        "name": "newBps",
+        "type": "uint256"
+      }
+    ],
+    "name": "setPlatformFee",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "bytes32",
         "name": "",
         "type": "bytes32"
@@ -318,6 +313,11 @@
     ],
     "name": "tasks",
     "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "taskId",
+        "type": "bytes32"
+      },
       {
         "internalType": "address",
         "name": "requester",
@@ -334,6 +334,16 @@
         "type": "uint256"
       },
       {
+        "internalType": "enum TaskEscrow.TaskStatus",
+        "name": "status",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint256",
+        "name": "lockedAt",
+        "type": "uint256"
+      },
+      {
         "internalType": "uint256",
         "name": "deadline",
         "type": "uint256"
@@ -342,11 +352,6 @@
         "internalType": "bytes32",
         "name": "agreementHash",
         "type": "bytes32"
-      },
-      {
-        "internalType": "enum TaskEscrow.TaskStatus",
-        "name": "status",
-        "type": "uint8"
       }
     ],
     "stateMutability": "view",

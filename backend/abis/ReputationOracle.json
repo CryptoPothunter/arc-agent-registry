@@ -63,7 +63,7 @@
       {
         "indexed": false,
         "internalType": "uint256",
-        "name": "newAverage",
+        "name": "newAvgScore",
         "type": "uint256"
       },
       {
@@ -128,7 +128,12 @@
         "components": [
           {
             "internalType": "uint256",
-            "name": "totalScore",
+            "name": "agentId",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "cumulativeScore",
             "type": "uint256"
           },
           {
@@ -138,7 +143,7 @@
           },
           {
             "internalType": "uint256",
-            "name": "averageScore",
+            "name": "lastUpdated",
             "type": "uint256"
           }
         ],
@@ -206,7 +211,12 @@
     "outputs": [
       {
         "internalType": "uint256",
-        "name": "totalScore",
+        "name": "agentId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "cumulativeScore",
         "type": "uint256"
       },
       {
@@ -216,7 +226,7 @@
       },
       {
         "internalType": "uint256",
-        "name": "averageScore",
+        "name": "lastUpdated",
         "type": "uint256"
       }
     ],
@@ -227,16 +237,16 @@
     "inputs": [
       {
         "internalType": "address",
-        "name": "_caller",
+        "name": "addr",
         "type": "address"
       },
       {
         "internalType": "bool",
-        "name": "_trusted",
+        "name": "v",
         "type": "bool"
       }
     ],
-    "name": "setTrustedCaller",
+    "name": "setTrusted",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"

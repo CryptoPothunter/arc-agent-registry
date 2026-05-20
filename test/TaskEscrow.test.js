@@ -7,7 +7,7 @@ describe("TaskEscrow", function () {
   let owner, requester, provider, feeRecipient;
 
   const depositAmount = 1000000n; // 1 USDC
-  const deadline = Math.floor(Date.now() / 1000) + 86400; // 24h from now
+  let deadline;
   const agreementHash = ethers.keccak256(ethers.toUtf8Bytes("task-agreement-v1"));
 
   function taskId(label) {
@@ -39,6 +39,9 @@ describe("TaskEscrow", function () {
     // Mint USDC to requester and approve escrow
     await mockUsdc.mint(requester.address, 10000000n); // 10 USDC
     await mockUsdc.connect(requester).approve(await taskEscrow.getAddress(), 10000000n);
+
+    // Set deadline relative to blockchain time
+    deadline = (await time.latest()) + 86400;
   });
 
   describe("Deposit", function () {

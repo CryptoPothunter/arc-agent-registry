@@ -1,0 +1,28 @@
+{
+  "network": "arc-testnet",
+  "chainId": 5042002,
+  "deployer": "0xC2203fD52c6F2A4429A22AA2EEc78D4D2DB72A59",
+  "contracts": {
+    "USDC": "0x3600000000000000000000000000000000000000",
+    "ReputationOracle": "0xe3353bA673e995Fb3d281c941E18f840bcB580E3",
+    "AgentRegistry": "0x618E8A63191ca223954fEB868f5b92aD0c039661",
+    "TaskEscrow": "0x908Da5ADbBd09cc6967C08574A38127d687502E5",
+    "AgentReputationMarket": "0x7e0b9B57e059683630AdDcC1df0E01204B2c92E6",
+    "AgentPipeline": "0x97bd5447109f9bcd85438d12b1A6Ea5456c337E7",
+    "AgentFund": "0xAd442E21c62f5bD4989ee1f4Cf7F8eA1CbD71550"
+  },
+  "arcNativeContracts": {
+    "ERC8004_IdentityRegistry": "0x8004A818BFB912233c491871b3d84c89A494BD9e",
+    "ERC8004_ReputationRegistry": "0x8004B663056A597Dffe9eCcC1965A193B7388713",
+    "ERC8004_ValidationRegistry": "0x8004Cb1BF31DAf7788923b405b754f57acEB4272",
+    "ERC8183_AgenticCommerce": "0x0747EEf0706327138c69792bF28Cd525089e4583"
+  },
+  "arcTestnetInfo": {
+    "rpc": "https://rpc.testnet.arc.network",
+    "wss": "wss://rpc.testnet.arc.network",
+    "explorer": "https://testnet.arcscan.app",
+    "faucet": "https://faucet.circle.com",
+    "currencySymbol": "USDC"
+  },
+  "deployedAt": "2026-05-20T10:54:07.269Z"
+}

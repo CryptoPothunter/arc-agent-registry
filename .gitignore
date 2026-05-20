@@ -20,7 +20,7 @@ coverage/
 coverage.json
 
 # Deployment
-deployed-addresses.json
+# deployed-addresses.json is tracked (contains testnet contract addresses)
 
 # IDE
 .vscode/

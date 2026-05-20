@@ -1,5 +1,6 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
+const { time } = require("@nomicfoundation/hardhat-network-helpers");
 
 describe("E2E: Full Flow", function () {
   let agentRegistry, taskEscrow, mockUsdc, reputationOracle;
@@ -9,7 +10,7 @@ describe("E2E: Full Flow", function () {
   const capabilityHashes = [ethers.keccak256(ethers.toUtf8Bytes("data-analysis"))];
   const basePriceUsdc = 5000000n; // 5 USDC
   const taskAmount = 5000000n; // 5 USDC
-  const deadline = Math.floor(Date.now() / 1000) + 86400;
+  let deadline;
   const agreementHash = ethers.keccak256(ethers.toUtf8Bytes("e2e-agreement"));
 
   function taskId(label) {
@@ -48,6 +49,9 @@ describe("E2E: Full Flow", function () {
     // Mint USDC to requester
     await mockUsdc.mint(requester.address, 100000000n); // 100 USDC
     await mockUsdc.connect(requester).approve(await taskEscrow.getAddress(), 100000000n);
+
+    // Set deadline relative to blockchain time
+    deadline = (await time.latest()) + 86400;
   });
 
   it("should complete full flow: register -> deposit -> release -> verify balances", async function () {
