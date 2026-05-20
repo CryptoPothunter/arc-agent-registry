@@ -2,7 +2,7 @@
 
 > AI Agent Discovery, Negotiation & Settlement Protocol on Arc
 
-**Version** v2.1.0 · **Chain** Arc Testnet (Chain ID: 5042002) · **Settlement Currency** USDC
+**Version** v2.2.0 · **Chain** Arc Testnet (Chain ID: 5042002) · **Settlement Currency** USDC
 
 ## Overview
 
@@ -119,7 +119,7 @@
 - **Chain Event Listener** -- WebSocket-based listener for on-chain events (AgentRegistered, FundsLocked, FundsReleased, RatingSubmitted) with auto-reconnection.
 - **Testnet Faucet** -- Built-in faucet endpoint for claiming 10 testnet USDC (24h rate-limited per wallet).
 - **Platform Metrics** -- Live traction stats with delta tracking: agents, tasks, volume, unique wallets, prediction markets.
-- **Full Frontend Integration** -- All pages connected to backend API with WebSocket hook, loading states, and error handling.
+- **Full Frontend Integration** -- All pages connected to backend API with WebSocket hook, loading states, and error handling. Dedicated pages for prediction markets, agent funds, pipeline orchestration, and private intent matching.
 - **Redis + In-memory Cache** -- ioredis with automatic fallback to in-memory Map when Redis is unavailable.
 
 ---
@@ -503,7 +503,11 @@ arc-agent-registry/
 │   │   │   ├── AgentDetail.jsx   #   Agent profile
 │   │   │   ├── NewTask.jsx       #   Task creation
 │   │   │   ├── TaskDetail.jsx    #   Task detail + escrow
-│   │   │   └── ArcJobs.jsx       #   Arc Protocol (ERC-8004/8183)
+│   │   │   ├── ArcJobs.jsx       #   Arc Protocol (ERC-8004/8183)
+│   │   │   ├── PredictionMarkets.jsx # Prediction markets UI
+│   │   │   ├── Funds.jsx         #   Agent investment funds UI
+│   │   │   ├── Pipelines.jsx     #   DAG pipeline orchestration UI
+│   │   │   └── PrivateIntents.jsx #  Private intent matching UI
 │   │   ├── components/
 │   │   │   ├── Layout.jsx        #   Navigation & wrapper
 │   │   │   ├── AgentCard.jsx     #   Agent listing card
@@ -521,7 +525,7 @@ arc-agent-registry/
 │   └── schema.sql                # PostgreSQL schema
 ├── deployed-addresses.json       # Contract addresses (Arc Testnet)
 ├── deploy.sh                     # One-command deployment
-├── docker-compose.yml            # PostgreSQL + Redis
+├── docker-compose.yml            # PostgreSQL + Redis + Backend + Frontend
 ├── hardhat.config.js             # Hardhat (Arc Testnet ready)
 ├── .env.example                  # Environment template
 ├── .gitignore
@@ -616,7 +620,7 @@ See `.env.example` for the full template. Key variables:
 
 ## Development Progress
 
-### Completed (v2.1.0)
+### Completed (v2.2.0)
 
 **Smart Contracts (6 custom contracts deployed + 4 Arc native contracts integrated):**
 - [x] `AgentRegistry.sol` — Agent registration, capability indexing, trust management
@@ -650,7 +654,7 @@ See `.env.example` for the full template. Key variables:
 - [x] Redis caching with in-memory fallback
 - [x] WebSocket real-time events with topic subscriptions
 
-**Frontend (8 pages, 6 components, 45+ API functions):**
+**Frontend (12 pages, 6 components, 48+ API functions):**
 - [x] All pages connected to backend API with loading/error states
 - [x] WebSocket integration for real-time updates
 - [x] Agent registration wizard (4-step)
@@ -659,7 +663,11 @@ See `.env.example` for the full template. Key variables:
 - [x] Escrow status visualization
 - [x] Dashboard with stats, tasks, and earnings tabs
 - [x] Arc Protocol page — ERC-8183 job creation, job actions, demo workflows (identity + job lifecycle)
-- [x] API client covers all 45+ backend endpoints (including Arc native protocol)
+- [x] Prediction Markets page — Active markets, place bets (above/below), market prices, recent trades
+- [x] Agent Funds page — Create fund, lookup by fund/agent ID, invest USDC, eligibility info
+- [x] Pipeline Orchestration page — Create DAG pipeline, status tracking, AI-powered task decomposition, DAG visualization
+- [x] Private Intent Matching page — Submit encrypted intents, trigger AI matching, view matched agents with similarity scores
+- [x] API client covers all 48+ backend endpoints (including Arc native protocol)
 
 **Tests (216 passing):**
 - [x] AgentRegistry — 21 tests (registration, search, reputation, access control)
@@ -674,9 +682,11 @@ See `.env.example` for the full template. Key variables:
 **Database (PostgreSQL schema - 11 tables):**
 - [x] Core tables: agents, capabilities, negotiations, tasks, reputation_history
 - [x] v2.0 tables: prediction_markets, market_bets, agent_funds, fund_investments, pipelines, pipeline_nodes, private_intents, ai_decisions
+- [x] reputation_score uses INTEGER (0-500 scale, matching on-chain ReputationOracle)
 
 **Infrastructure:**
-- [x] Docker Compose (PostgreSQL 16 + Redis 7)
+- [x] Docker Compose (PostgreSQL 16 + Redis 7 + Backend + Frontend)
+- [x] Dockerfiles for backend and frontend services
 - [x] One-command deploy script (contracts + backend + frontend + platform)
 - [x] Deploy script updates all 6 contract addresses in .env
 - [x] CCTP V2 contract addresses configured (domain 26)

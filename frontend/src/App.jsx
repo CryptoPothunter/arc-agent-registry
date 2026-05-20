@@ -9,6 +9,10 @@ import Dashboard from './pages/Dashboard';
 import NewTask from './pages/NewTask';
 import TaskDetail from './pages/TaskDetail';
 import ArcJobs from './pages/ArcJobs';
+import PredictionMarkets from './pages/PredictionMarkets';
+import Funds from './pages/Funds';
+import Pipelines from './pages/Pipelines';
+import PrivateIntents from './pages/PrivateIntents';
 
 function App() {
   return (
@@ -24,6 +28,10 @@ function App() {
         <Route path="/tasks/new" element={<NewTask />} />
         <Route path="/tasks/:id" element={<TaskDetail />} />
         <Route path="/arc" element={<ArcJobs />} />
+        <Route path="/markets" element={<PredictionMarkets />} />
+        <Route path="/funds" element={<Funds />} />
+        <Route path="/pipelines" element={<Pipelines />} />
+        <Route path="/intents" element={<PrivateIntents />} />
       </Routes>
     </Layout>
   );

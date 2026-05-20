@@ -5,6 +5,10 @@ const navLinks = [
   { to: '/explore', label: 'Explore' },
   { to: '/register', label: 'Register' },
   { to: '/dashboard', label: 'Dashboard' },
+  { to: '/markets', label: 'Markets' },
+  { to: '/funds', label: 'Funds' },
+  { to: '/pipelines', label: 'Pipelines' },
+  { to: '/intents', label: 'Intents' },
   { to: '/arc', label: 'Arc Protocol' },
 ];
 
@@ -113,6 +117,10 @@ export default function Layout({ children }) {
                 <li><Link to="/explore" className="hover:text-white transition-colors">Explore Agents</Link></li>
                 <li><Link to="/register" className="hover:text-white transition-colors">Register Agent</Link></li>
                 <li><Link to="/dashboard" className="hover:text-white transition-colors">Dashboard</Link></li>
+                <li><Link to="/markets" className="hover:text-white transition-colors">Prediction Markets</Link></li>
+                <li><Link to="/funds" className="hover:text-white transition-colors">Agent Funds</Link></li>
+                <li><Link to="/pipelines" className="hover:text-white transition-colors">Pipelines</Link></li>
+                <li><Link to="/intents" className="hover:text-white transition-colors">Private Intents</Link></li>
               </ul>
             </div>
             <div>

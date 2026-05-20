@@ -1,5 +1,5 @@
 -- Arc Agent Registry - Database Schema
--- #31: agents.agent_id uses BIGINT UNIQUE NOT NULL, reputation_score uses DECIMAL(3,2)
+-- #31: agents.agent_id uses BIGINT UNIQUE NOT NULL, reputation_score uses INTEGER (0-500 scale, matching on-chain)
 -- #32: negotiations/tasks use VARCHAR(100) UNIQUE instead of UUID
 
 -- Agents table
@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS agents (
     name              VARCHAR(255) NOT NULL,
     metadata_cid      VARCHAR(255),
     is_active         BOOLEAN DEFAULT TRUE,
-    reputation_score  DECIMAL(3,2) DEFAULT 0.00,
+    reputation_score  INTEGER DEFAULT 400,         -- 0-500 scale (1.00-5.00), matches on-chain ReputationOracle
     total_tasks       INTEGER DEFAULT 0,
     registered_at     TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at        TIMESTAMP WITH TIME ZONE DEFAULT NOW()
