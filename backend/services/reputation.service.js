@@ -6,7 +6,7 @@
 const { ethers } = require('ethers');
 const ReputationOracleABI = require('../abis/ReputationOracle.json');
 
-const RPC_URL = process.env.RPC_URL || 'https://rpc.sepolia.org';
+const RPC_URL = process.env.RPC_URL || 'https://rpc.testnet.arc.network';
 const REPUTATION_ADDRESS = process.env.REPUTATION_CONTRACT || '';
 const OPERATOR_KEY = process.env.OPERATOR_PRIVATE_KEY || '';
 

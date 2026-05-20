@@ -11,7 +11,7 @@ const fetch = require('node-fetch');
 const CIRCLE_API_KEY = process.env.CIRCLE_API_KEY || '';
 const CIRCLE_PAYMASTER_URL = process.env.CIRCLE_PAYMASTER_URL || 'https://api.circle.com/v1/paymaster';
 const ENTRYPOINT_ADDRESS = process.env.ENTRYPOINT_ADDRESS || '0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789';
-const RPC_URL = process.env.RPC_URL || 'https://rpc.sepolia.org';
+const RPC_URL = process.env.RPC_URL || 'https://rpc.testnet.arc.network';
 const PAYMASTER_PRIVATE_KEY = process.env.PAYMASTER_PRIVATE_KEY || '';
 
 class PaymasterService {

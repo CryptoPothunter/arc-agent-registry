@@ -7,7 +7,7 @@ const { ethers } = require('ethers');
 
 const USYC_CONTRACT = process.env.USYC_CONTRACT || '';
 const USDC_CONTRACT = process.env.USDC_CONTRACT || '';
-const RPC_URL = process.env.RPC_URL || 'https://rpc.sepolia.org';
+const RPC_URL = process.env.RPC_URL || 'https://rpc.testnet.arc.network';
 
 const ERC20_ABI = require('../abis/ERC20.json');
 

@@ -9,7 +9,7 @@ const TaskEscrowABI = require('../abis/TaskEscrow.json');
 const ERC20_ABI = require('../abis/ERC20.json');
 const USYCService = require('./usyc.service');
 
-const RPC_URL = process.env.RPC_URL || 'https://rpc.sepolia.org';
+const RPC_URL = process.env.RPC_URL || 'https://rpc.testnet.arc.network';
 const ESCROW_ADDRESS = process.env.ESCROW_CONTRACT || '';
 const USDC_ADDRESS = process.env.USDC_CONTRACT || '';
 const OPERATOR_KEY = process.env.OPERATOR_PRIVATE_KEY || '';

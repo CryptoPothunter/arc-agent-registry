@@ -8,7 +8,7 @@ const { uploadToIPFS, fetchFromIPFS } = require('./ipfs.service');
 const { getCache, setCache, CACHE_KEYS, syncOnChainEvent } = require('../config/redis.config');
 const AgentRegistryABI = require('../abis/AgentRegistry.json');
 
-const RPC_URL = process.env.RPC_URL || 'https://rpc.sepolia.org';
+const RPC_URL = process.env.RPC_URL || 'https://rpc.testnet.arc.network';
 const REGISTRY_ADDRESS = process.env.REGISTRY_CONTRACT || '';
 const OPERATOR_KEY = process.env.OPERATOR_PRIVATE_KEY || '';
 
