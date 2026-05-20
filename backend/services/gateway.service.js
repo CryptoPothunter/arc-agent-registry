@@ -1,35 +1,60 @@
 /**
  * GatewayService - unified cross-chain balance and transfer operations.
  * Abstracts multi-chain wallet interactions behind a single interface.
+ * Supports Arc Testnet as primary chain with CCTP cross-chain transfers.
  */
 
 const { ethers } = require('ethers');
 
 const SUPPORTED_CHAINS = {
+  'ARC-TESTNET': {
+    rpcUrl: process.env.ARC_RPC_URL || 'https://rpc.testnet.arc.network',
+    chainId: 5042002,
+    usdc: process.env.USDC_ADDRESS || '0x3600000000000000000000000000000000000000',
+    eurc: process.env.EURC_ADDRESS || '0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a',
+    explorer: 'https://testnet.arcscan.app',
+    cctpDomain: 0, // CCTP domain identifier for Arc
+  },
   'ETH-SEPOLIA': {
     rpcUrl: process.env.ETH_SEPOLIA_RPC || 'https://rpc.sepolia.org',
     chainId: 11155111,
     usdc: process.env.USDC_SEPOLIA || '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238',
+    explorer: 'https://sepolia.etherscan.io',
+    cctpDomain: 0,
   },
   'AVAX-FUJI': {
     rpcUrl: process.env.AVAX_FUJI_RPC || 'https://api.avax-test.network/ext/bc/C/rpc',
     chainId: 43113,
     usdc: process.env.USDC_FUJI || '0x5425890298aed601595a70AB815c96711a31Bc65',
+    explorer: 'https://testnet.snowtrace.io',
+    cctpDomain: 1,
   },
   'ARB-SEPOLIA': {
     rpcUrl: process.env.ARB_SEPOLIA_RPC || 'https://sepolia-rollup.arbitrum.io/rpc',
     chainId: 421614,
     usdc: process.env.USDC_ARB_SEPOLIA || '0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d',
+    explorer: 'https://sepolia.arbiscan.io',
+    cctpDomain: 3,
   },
 };
 
 const ERC20_ABI = require('../abis/ERC20.json');
 
+// CCTP MessageTransmitter ABI (subset for burn/depositForBurn)
+const CCTP_TOKEN_MESSENGER_ABI = [
+  'function depositForBurn(uint256 amount, uint32 destinationDomain, bytes32 mintRecipient, address burnToken) external returns (uint64 nonce)',
+  'event DepositForBurn(uint64 indexed nonce, address indexed burnToken, uint256 amount, address indexed depositor, bytes32 mintRecipient, uint32 destinationDomain, bytes32 destinationTokenMessenger, bytes32 destinationCaller)',
+];
+
 class GatewayService {
   constructor() {
     this.providers = {};
     for (const [chain, config] of Object.entries(SUPPORTED_CHAINS)) {
-      this.providers[chain] = new ethers.JsonRpcProvider(config.rpcUrl);
+      try {
+        this.providers[chain] = new ethers.JsonRpcProvider(config.rpcUrl);
+      } catch (err) {
+        console.warn(`[Gateway] Failed to create provider for ${chain}:`, err.message);
+      }
     }
   }
 
@@ -45,6 +70,7 @@ class GatewayService {
     const results = await Promise.allSettled(
       Object.entries(SUPPORTED_CHAINS).map(async ([chain, config]) => {
         const provider = this.providers[chain];
+        if (!provider) return { chain, balance: 0n };
         const usdc = new ethers.Contract(config.usdc, ERC20_ABI, provider);
         const balance = await usdc.balanceOf(walletAddress);
         return { chain, balance };
@@ -57,7 +83,7 @@ class GatewayService {
         balances[chain] = ethers.formatUnits(balance, 6);
         total += balance;
       } else {
-        console.warn(`[Gateway] Failed to fetch balance:`, result.reason.message);
+        console.warn(`[Gateway] Failed to fetch balance:`, result.reason?.message);
       }
     }
 
@@ -69,7 +95,41 @@ class GatewayService {
   }
 
   /**
-   * Initiate a cross-chain USDC transfer using Circle CCTP (Cross-Chain Transfer Protocol).
+   * Get USDC + EURC balance on Arc Testnet specifically.
+   * @param {string} walletAddress
+   * @returns {Promise<object>} Arc Testnet balances.
+   */
+  async getArcBalance(walletAddress) {
+    const config = SUPPORTED_CHAINS['ARC-TESTNET'];
+    const provider = this.providers['ARC-TESTNET'];
+    if (!provider) throw new Error('Arc Testnet provider not available');
+
+    const usdc = new ethers.Contract(config.usdc, ERC20_ABI, provider);
+    const usdcBalance = await usdc.balanceOf(walletAddress);
+
+    let eurcBalance = 0n;
+    if (config.eurc) {
+      try {
+        const eurc = new ethers.Contract(config.eurc, ERC20_ABI, provider);
+        eurcBalance = await eurc.balanceOf(walletAddress);
+      } catch (err) {
+        console.warn('[Gateway] Failed to fetch EURC balance:', err.message);
+      }
+    }
+
+    return {
+      address: walletAddress,
+      chain: 'ARC-TESTNET',
+      usdc: ethers.formatUnits(usdcBalance, 6),
+      eurc: ethers.formatUnits(eurcBalance, 6),
+    };
+  }
+
+  /**
+   * Initiate a cross-chain USDC transfer using Circle CCTP.
+   * On Arc Testnet, uses the TokenMessenger contract to burn USDC
+   * and enables minting on the destination chain.
+   *
    * @param {object} params - Transfer parameters.
    * @param {string} params.from - Source wallet address.
    * @param {string} params.to - Destination wallet address.
@@ -85,40 +145,138 @@ class GatewayService {
     }
 
     if (sourceChain === destChain) {
-      // Same-chain transfer: direct ERC20 transfer
-      const config = SUPPORTED_CHAINS[sourceChain];
-      const usdc = new ethers.Contract(config.usdc, ERC20_ABI, signer);
-      const amountWei = ethers.parseUnits(amount, 6);
+      return this._sameChainTransfer({ from, to, amount, chain: sourceChain, signer });
+    }
 
-      const tx = await usdc.transfer(to, amountWei);
-      const receipt = await tx.wait();
+    return this._cctpTransfer({ from, to, amount, sourceChain, destChain, signer });
+  }
+
+  /**
+   * Same-chain USDC transfer via ERC-20 transfer.
+   * @private
+   */
+  async _sameChainTransfer({ from, to, amount, chain, signer }) {
+    const config = SUPPORTED_CHAINS[chain];
+    const usdc = new ethers.Contract(config.usdc, ERC20_ABI, signer);
+    const amountWei = ethers.parseUnits(amount, 6);
+
+    const tx = await usdc.transfer(to, amountWei);
+    const receipt = await tx.wait();
+
+    return {
+      type: 'same-chain',
+      status: 'completed',
+      txHash: receipt.hash,
+      from,
+      to,
+      amount,
+      chain,
+      explorerUrl: `${config.explorer}/tx/${receipt.hash}`,
+    };
+  }
+
+  /**
+   * Cross-chain USDC transfer via Circle CCTP (burn & mint).
+   * Burns USDC on source chain; destination chain minting requires
+   * attestation from Circle's attestation service.
+   * @private
+   */
+  async _cctpTransfer({ from, to, amount, sourceChain, destChain, signer }) {
+    const sourceConfig = SUPPORTED_CHAINS[sourceChain];
+    const destConfig = SUPPORTED_CHAINS[destChain];
+    const amountWei = ethers.parseUnits(amount, 6);
+
+    // Convert destination address to bytes32 format for CCTP
+    const mintRecipient = ethers.zeroPadValue(to, 32);
+
+    // Step 1: Approve TokenMessenger to spend USDC
+    const usdc = new ethers.Contract(sourceConfig.usdc, ERC20_ABI, signer);
+    const tokenMessengerAddress = process.env.CCTP_TOKEN_MESSENGER || ethers.ZeroAddress;
+
+    if (tokenMessengerAddress === ethers.ZeroAddress) {
+      // No CCTP TokenMessenger configured - simulate the transfer
+      console.log(`[Gateway] CCTP TokenMessenger not configured. Simulating cross-chain transfer.`);
+      console.log(`[Gateway] ${amount} USDC from ${sourceChain} (${from}) -> ${destChain} (${to})`);
 
       return {
-        type: 'same-chain',
-        txHash: receipt.hash,
+        type: 'cross-chain',
+        status: 'simulated',
         from,
         to,
         amount,
-        chain: sourceChain,
+        sourceChain,
+        destChain,
+        destinationDomain: destConfig.cctpDomain,
+        message: `CCTP transfer simulated. Configure CCTP_TOKEN_MESSENGER for live transfers.`,
+        estimatedTime: '10-15 minutes',
       };
     }
 
-    // Cross-chain: placeholder for CCTP integration
-    // In production, this would burn USDC on source chain via MessageTransmitter
-    // and mint on destination chain.
-    console.log(`[Gateway] Cross-chain transfer: ${amount} USDC from ${sourceChain} to ${destChain}`);
+    const approveTx = await usdc.approve(tokenMessengerAddress, amountWei);
+    await approveTx.wait();
+
+    // Step 2: Call depositForBurn on TokenMessenger
+    const tokenMessenger = new ethers.Contract(
+      tokenMessengerAddress,
+      CCTP_TOKEN_MESSENGER_ABI,
+      signer
+    );
+
+    const burnTx = await tokenMessenger.depositForBurn(
+      amountWei,
+      destConfig.cctpDomain,
+      mintRecipient,
+      sourceConfig.usdc
+    );
+    const burnReceipt = await burnTx.wait();
+
+    // Extract nonce from DepositForBurn event
+    const iface = new ethers.Interface(CCTP_TOKEN_MESSENGER_ABI);
+    let burnNonce = null;
+    for (const log of burnReceipt.logs) {
+      try {
+        const parsed = iface.parseLog({ topics: log.topics, data: log.data });
+        if (parsed?.name === 'DepositForBurn') {
+          burnNonce = parsed.args.nonce.toString();
+          break;
+        }
+      } catch {
+        // skip non-matching logs
+      }
+    }
 
     return {
       type: 'cross-chain',
-      status: 'pending',
+      status: 'burned',
+      burnTxHash: burnReceipt.hash,
+      burnNonce,
       from,
       to,
       amount,
       sourceChain,
       destChain,
-      message: 'CCTP transfer initiated. Attestation pending.',
+      destinationDomain: destConfig.cctpDomain,
+      explorerUrl: `${sourceConfig.explorer}/tx/${burnReceipt.hash}`,
+      message: 'USDC burned on source chain. Awaiting Circle attestation for destination mint.',
       estimatedTime: '10-15 minutes',
+      nextStep: 'Poll Circle attestation API, then call receiveMessage on destination MessageTransmitter.',
     };
+  }
+
+  /**
+   * Get supported chains list.
+   * @returns {object} Map of supported chain configs (without sensitive data).
+   */
+  getSupportedChains() {
+    const chains = {};
+    for (const [name, config] of Object.entries(SUPPORTED_CHAINS)) {
+      chains[name] = {
+        chainId: config.chainId,
+        explorer: config.explorer,
+        cctpDomain: config.cctpDomain,
+      };
+    }
+    return chains;
   }
 }
 
