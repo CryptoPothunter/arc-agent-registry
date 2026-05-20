@@ -1,6 +1,6 @@
 {
   "name": "arc-agent-registry-backend",
-  "version": "1.0.0",
+  "version": "2.2.0",
   "description": "Backend server for the Arc Agent Registry - agent discovery, negotiation, and escrow",
   "main": "server.js",
   "scripts": {

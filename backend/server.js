@@ -178,7 +178,7 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     service: 'arc-agent-os',
-    version: '2.0.0',
+    version: '2.2.0',
     uptime: process.uptime(),
     wsClients: wss.clients.size,
     autonomousAgents: autonomousAgentStatuses(),
@@ -262,7 +262,7 @@ app.use((req, res) => {
 
 // --- Start Server ---
 server.listen(PORT, () => {
-  console.log(`\nArc Agent OS v2.0 running on port ${PORT}`);
+  console.log(`\nArc Agent OS v2.2.0 running on port ${PORT}`);
   console.log(`WebSocket: ws://localhost:${PORT}`);
   console.log(`Health: http://localhost:${PORT}/api/health`);
   console.log(`Explorer: https://testnet.arcscan.app`);

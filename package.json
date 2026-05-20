@@ -1,6 +1,6 @@
 {
   "name": "arc-agent-registry",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "Arc Agent Registry - AI Agent Discovery, Negotiation & Settlement Protocol on Arc (ERC-8004 + ERC-8183)",
   "scripts": {
     "compile": "npx hardhat compile",
