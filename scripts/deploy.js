@@ -6,8 +6,9 @@ async function main() {
   const [deployer] = await hre.ethers.getSigners();
   console.log("Deploying contracts with account:", deployer.address);
 
+  // Arc native balance uses 18 decimals, ERC-20 USDC uses 6
   const balance = await hre.ethers.provider.getBalance(deployer.address);
-  console.log("Account balance:", hre.ethers.formatUnits(balance, 6), "USDC (gas)");
+  console.log("Account balance:", hre.ethers.formatUnits(balance, 18), "USDC (native gas)");
 
   const networkName = hre.network.name;
   console.log("Network:", networkName);

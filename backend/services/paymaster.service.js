@@ -163,21 +163,29 @@ class PaymasterService {
 
   /**
    * Get current gas prices from the provider.
+   * Arc Testnet requires minimum 20 Gwei base fee (EIP-1559 + EWMA smoothing).
    *
    * @returns {Promise<{ maxFeePerGas: bigint, maxPriorityFeePerGas: bigint }>}
    * @private
    */
   async _getGasPrices() {
+    // Arc Testnet minimum base fee: 20 Gwei
+    const ARC_MIN_BASE_FEE = ethers.parseUnits('20', 'gwei');
     try {
       const feeData = await this.provider.getFeeData();
+      let maxFeePerGas = feeData.maxFeePerGas || ARC_MIN_BASE_FEE;
+      // Ensure we meet Arc Testnet minimum (20 Gwei)
+      if (maxFeePerGas < ARC_MIN_BASE_FEE) {
+        maxFeePerGas = ARC_MIN_BASE_FEE;
+      }
       return {
-        maxFeePerGas: feeData.maxFeePerGas || ethers.parseUnits('50', 'gwei'),
-        maxPriorityFeePerGas: feeData.maxPriorityFeePerGas || ethers.parseUnits('2', 'gwei'),
+        maxFeePerGas,
+        maxPriorityFeePerGas: feeData.maxPriorityFeePerGas || 0n,
       };
     } catch {
       return {
         maxFeePerGas: ethers.parseUnits('50', 'gwei'),
-        maxPriorityFeePerGas: ethers.parseUnits('2', 'gwei'),
+        maxPriorityFeePerGas: 0n,
       };
     }
   }
@@ -217,7 +225,8 @@ class PaymasterService {
       });
 
       const receipt = await tx.wait();
-      const gasUsedUSDC = ethers.formatUnits(receipt.gasUsed * receipt.gasPrice, 6);
+      // On Arc Testnet, gas is paid in USDC (18 decimals for native balances)
+      const gasUsedUSDC = ethers.formatUnits(receipt.gasUsed * receipt.gasPrice, 18);
 
       return {
         sponsored: true,

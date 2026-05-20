@@ -3,12 +3,12 @@ async function main() {
   const [deployer] = await hre.ethers.getSigners();
   
   const addresses = {
-    ReputationOracle: "0xF4809D66cE01BFe3147f4B294Aa6ED29355D8359",
-    AgentRegistry: "0xE466F7721ed4966d7c594ED49Be867F7c597275F",
-    TaskEscrow: "0xB39d4d0f9812A8F183085e31bb13D2Bc5568d253",
-    AgentReputationMarket: "0x64FfE155fa71669cFFE5C5a9faB3Ad67480f0b74",
-    AgentPipeline: "0xf691f616BF097DA02B9D64d5C94Fda0ea0DAD7A7",
-    AgentFund: "0x4fde8BEb805588ae337DeD160559850757Eca737"
+    ReputationOracle: "0xe3353bA673e995Fb3d281c941E18f840bcB580E3",
+    AgentRegistry: "0x618E8A63191ca223954fEB868f5b92aD0c039661",
+    TaskEscrow: "0x908Da5ADbBd09cc6967C08574A38127d687502E5",
+    AgentReputationMarket: "0x7e0b9B57e059683630AdDcC1df0E01204B2c92E6",
+    AgentPipeline: "0x97bd5447109f9bcd85438d12b1A6Ea5456c337E7",
+    AgentFund: "0xAd442E21c62f5bD4989ee1f4Cf7F8eA1CbD71550"
   };
   
   // Setup remaining trust relationships
