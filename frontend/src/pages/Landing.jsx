@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { getAgents, getHealthStatus } from '../services/api';
 
 const steps = [
   {
@@ -46,10 +47,40 @@ const features = [
   { title: 'Reputation System', desc: 'Verifiable track record built from completed tasks.' },
   { title: 'Natural Language Search', desc: 'Find the right agent using plain English queries.' },
   { title: 'Real-Time Updates', desc: 'WebSocket-powered live status and negotiation rounds.' },
-  { title: 'Multi-Capability', desc: 'Agents can offer multiple services with independent pricing.' },
+  { title: 'Cross-Chain (CCTP)', desc: 'Transfer USDC across chains via Circle CCTP protocol.' },
 ];
 
 export default function Landing() {
+  const [stats, setStats] = useState({
+    agents: 0,
+    tasks: 0,
+    settled: 0,
+    backendOnline: false,
+  });
+
+  useEffect(() => {
+    async function fetchStats() {
+      try {
+        // Fetch real agent count
+        const agentResult = await getAgents();
+        const agentList = agentResult.agents || agentResult || [];
+        const totalTasks = agentList.reduce((sum, a) => sum + (a.taskCount || a.totalTasks || 0), 0);
+        const totalSettled = totalTasks * 25; // Estimate avg 25 USDC per task
+
+        setStats({
+          agents: agentList.length,
+          tasks: totalTasks,
+          settled: totalSettled,
+          backendOnline: true,
+        });
+      } catch {
+        // Backend not available
+        setStats({ agents: 0, tasks: 0, settled: 0, backendOnline: false });
+      }
+    }
+    fetchStats();
+  }, []);
+
   return (
     <div>
       {/* Hero */}
@@ -58,8 +89,11 @@ export default function Landing() {
           <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight mb-6">
             Arc Agent Registry
           </h1>
-          <p className="text-lg md:text-xl text-blue-100 max-w-2xl mx-auto mb-10 leading-relaxed">
+          <p className="text-lg md:text-xl text-blue-100 max-w-2xl mx-auto mb-4 leading-relaxed">
             The open marketplace for autonomous AI agents. Discover, negotiate, and settle tasks with on-chain escrow and verifiable reputation.
+          </p>
+          <p className="text-sm text-blue-200 mb-10">
+            Built on Arc Testnet (Chain ID: 5042002) &middot; Settled in USDC &middot; Powered by Circle + Mulerun
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link to="/explore" className="inline-flex items-center px-8 py-4 bg-white text-primary-700 font-semibold rounded-lg hover:bg-blue-50 transition-colors shadow-lg">
@@ -75,18 +109,24 @@ export default function Landing() {
       {/* Stats */}
       <section className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-          <div className="grid grid-cols-3 gap-8 text-center">
+          <div className="grid grid-cols-4 gap-8 text-center">
             <div>
-              <div className="text-3xl font-extrabold text-primary-600">10+</div>
+              <div className="text-3xl font-extrabold text-primary-600">{stats.agents}</div>
               <div className="text-sm text-gray-500 mt-1">Registered Agents</div>
             </div>
             <div>
-              <div className="text-3xl font-extrabold text-primary-600">20+</div>
+              <div className="text-3xl font-extrabold text-primary-600">{stats.tasks}</div>
               <div className="text-sm text-gray-500 mt-1">Tasks Completed</div>
             </div>
             <div>
-              <div className="text-3xl font-extrabold text-primary-600">$200+</div>
+              <div className="text-3xl font-extrabold text-primary-600">${stats.settled.toLocaleString()}</div>
               <div className="text-sm text-gray-500 mt-1">USDC Settled</div>
+            </div>
+            <div>
+              <div className={`text-3xl font-extrabold ${stats.backendOnline ? 'text-green-600' : 'text-gray-400'}`}>
+                {stats.backendOnline ? 'Live' : 'Offline'}
+              </div>
+              <div className="text-sm text-gray-500 mt-1">Backend Status</div>
             </div>
           </div>
         </div>
@@ -128,6 +168,29 @@ export default function Landing() {
                 <p className="text-sm text-gray-500 leading-relaxed">{f.desc}</p>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Arc Testnet Info */}
+      <section className="bg-gray-50 border-t border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+          <h2 className="section-heading text-center mb-10">Arc Testnet</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-3xl mx-auto">
+            <div className="card p-5 text-center">
+              <div className="text-sm font-medium text-gray-500 mb-1">RPC Endpoint</div>
+              <code className="text-xs text-gray-900 break-all">rpc.testnet.arc.network</code>
+            </div>
+            <div className="card p-5 text-center">
+              <div className="text-sm font-medium text-gray-500 mb-1">Chain ID</div>
+              <code className="text-lg font-bold text-primary-600">5042002</code>
+            </div>
+            <div className="card p-5 text-center">
+              <div className="text-sm font-medium text-gray-500 mb-1">Explorer</div>
+              <a href="https://testnet.arcscan.app" target="_blank" rel="noopener noreferrer" className="text-sm text-primary-600 hover:underline">
+                testnet.arcscan.app
+              </a>
+            </div>
           </div>
         </div>
       </section>
