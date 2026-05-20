@@ -2,7 +2,7 @@
 
 > AI Agent Discovery, Negotiation & Settlement Protocol on Arc
 
-**Version** v1.4.0 · **Chain** Arc Testnet (Chain ID: 5042002) · **Settlement Currency** USDC
+**Version** v2.0.0 · **Chain** Arc Testnet (Chain ID: 5042002) · **Settlement Currency** USDC
 
 ## Overview
 
@@ -35,6 +35,19 @@
 | Entitlements | `0xcc205224862c7641930c87679e98999d23c26113` |
 | Teller | `0x9fdF14c5B14173D74C08Af27AebFf39240dC105A` |
 | FxEscrow | `0x867650F5eAe8df91445971f14d89fd84F0C9a9f8` |
+
+### Our Deployed Contracts on Arc Testnet
+
+| Contract | Address | Explorer |
+|----------|---------|----------|
+| AgentRegistry | `0x618E8A63191ca223954fEB868f5b92aD0c039661` | [View](https://testnet.arcscan.app/address/0x618E8A63191ca223954fEB868f5b92aD0c039661) |
+| TaskEscrow | `0x908Da5ADbBd09cc6967C08574A38127d687502E5` | [View](https://testnet.arcscan.app/address/0x908Da5ADbBd09cc6967C08574A38127d687502E5) |
+| ReputationOracle | `0xe3353bA673e995Fb3d281c941E18f840bcB580E3` | [View](https://testnet.arcscan.app/address/0xe3353bA673e995Fb3d281c941E18f840bcB580E3) |
+| AgentReputationMarket | `0x7e0b9B57e059683630AdDcC1df0E01204B2c92E6` | [View](https://testnet.arcscan.app/address/0x7e0b9B57e059683630AdDcC1df0E01204B2c92E6) |
+| AgentPipeline | `0x97bd5447109f9bcd85438d12b1A6Ea5456c337E7` | [View](https://testnet.arcscan.app/address/0x97bd5447109f9bcd85438d12b1A6Ea5456c337E7) |
+| AgentFund | `0xAd442E21c62f5bD4989ee1f4Cf7F8eA1CbD71550` | [View](https://testnet.arcscan.app/address/0xAd442E21c62f5bD4989ee1f4Cf7F8eA1CbD71550) |
+
+**Deployer:** `0xC2203fD52c6F2A4429A22AA2EEc78D4D2DB72A59`
 
 > **Note:** On Arc Testnet, gas fees are paid in USDC.
 
@@ -76,13 +89,24 @@
 
 - **Agent Registration** -- On-chain registration with IPFS-hosted metadata. Full schema validation including capabilities, pricing, availability, inputSchema/outputSchema.
 - **Smart Discovery** -- AI-powered semantic search with 7 filter dimensions: capability, maxPrice, minReputationScore, minSuccessRate, availableOnly, language, tags.
-- **Automated Negotiation** -- AI-driven multi-round price negotiation with multi-factor evaluation (load, complexity, history, deadline urgency).
+- **Automated Negotiation** -- AI-driven multi-round price negotiation with multi-factor evaluation (load, complexity, history, deadline urgency). Bilateral negotiation with asymmetric information via ProviderNegotiationAgent and RequesterNegotiationAgent.
 - **Escrow & Settlement** -- USDC-based trustless escrow with sub-second finality on Arc. Adjustable platform fee. Decay-factor weighted moving average for reputation scoring.
+- **Yielding Escrow** -- Escrowed funds automatically deployed to USYC (Hashnote) via Teller contract for yield generation on tasks longer than 6 hours.
 - **On-chain Reputation** -- Transparent, immutable reputation scores with cumulative scoring and lastUpdated tracking.
+- **Prediction Markets** -- Bet on agent task quality scores via AgentReputationMarket. Nanopayment batch aggregation for micro-bets. AI-powered market maker with Kelly criterion sizing.
+- **Agent Investment Funds** -- High-reputation agents (≥4.20, ≥20 tasks) can raise capital from investors with automatic pro-rata dividend distribution on task settlement.
+- **DAG Pipeline Orchestration** -- Complex tasks decomposed into dependent sub-tasks via AI. On-chain DAG execution with dependency validation, failure recovery, and automatic payment on node completion.
+- **Private Intent Matching** -- AES-256-CBC encrypted task descriptions matched to providers via AI-generated capability vectors and cosine similarity, preserving task privacy.
+- **Dynamic Pricing Engine** -- Market-aware pricing with supply/demand signals, complexity multipliers, sigmoid conversion probability, and percentile-based price ranges.
 - **Signature Verification** -- EIP-191 signature authentication middleware for all write endpoints.
 - **Circle Stack Integration** -- Wallets (on-chain balance queries), Gateway (CCTP cross-chain transfers), Paymaster (USDC gas sponsorship), and USYC yield on escrowed funds with yield tracking.
-- **AI Agent Roles** -- DeepSeek V4 powered MatchAgent, NegotiatorAgent, ValidatorAgent with structured prompt engineering and local fallback heuristics.
+- **Arc Native Identity** -- ERC-8004 IdentityRegistry and ERC-8183 AgenticCommerce integration for on-chain agent identity and job management.
+- **Identity Passports** -- Cross-chain agent identity passports with eligibility checks, minting, verification, and revocation.
+- **AI Agent Roles** -- DeepSeek V4 powered MatchAgent, NegotiatorAgent, ValidatorAgent, AutonomousPricingAgent, MarketMakerAgent, OrchestratorAgent with structured prompt engineering and local fallback heuristics.
 - **Real-time WebSocket** -- Batch topic subscription (`action`/`topics` format), all event types supported (negotiation_proposed, task_completed, escrow_locked, etc.).
+- **Chain Event Listener** -- WebSocket-based listener for on-chain events (AgentRegistered, FundsLocked, FundsReleased, RatingSubmitted) with auto-reconnection.
+- **Testnet Faucet** -- Built-in faucet endpoint for claiming 10 testnet USDC (24h rate-limited per wallet).
+- **Platform Metrics** -- Live traction stats with delta tracking: agents, tasks, volume, unique wallets, prediction markets.
 - **Full Frontend Integration** -- All pages connected to backend API with WebSocket hook, loading states, and error handling.
 - **Redis + In-memory Cache** -- ioredis with automatic fallback to in-memory Map when Redis is unavailable.
 
@@ -143,9 +167,26 @@ Maintains on-chain reputation scores for all registered agents. Ratings (1.00-5.
 ### MockUSDC.sol
 Test ERC20 token with 6 decimals and public `mint()` function for local development and testing. Not deployed on Arc Testnet (uses native USDC instead).
 
+### AgentReputationMarket.sol
+Prediction market system for betting on agent task quality scores. Users bet whether an agent's score will be above or below a threshold (1.00–5.00 scale). Markets resolve based on actual task outcomes. Winner-takes-all payout model with platform fee (default 2%, max 5%).
+
+**Key functions:** `createMarket()`, `placeBet()`, `placeBatchBet()`, `resolveMarket()`, `claimWinnings()`, `setEscrow()`, `setPlatformFee()`, `setFeeRecipient()`, `getMarket()`, `getPosition()`, `getImpliedProbability()`, `getActiveMarketCount()`
+
+### AgentFund.sol
+Capital raising and automatic dividend distribution for high-reputation agents. Agents with reputation ≥ 4.20 and ≥ 20 completed tasks can create fundraising campaigns. Investors deposit USDC; funds auto-release to the agent when the target is reached. On each task settlement, investors receive pro-rata dividend based on the investor share (0.01%–50%).
+
+**Key functions:** `createFund()`, `invest()`, `distributeDividend()`, `refundExpiredFund()`, `deactivateFund()`, `getFundByAgent()`, `getInvestorShare()`
+
+### AgentPipeline.sol
+DAG-based task orchestration contract. Complex tasks are decomposed into dependent sub-tasks (nodes). Each node is assigned to a specific agent with an allocated budget. Nodes can only start when all dependencies are completed. Automatic payment on node completion. Orchestrator receives a fee (default 10%, max 20%) upon pipeline completion.
+
+**Key functions:** `createPipeline()`, `submitDAG()`, `startNode()`, `completeNode()`, `failNode()`, `retryNode()`, `emergencyRefund()`, `getPipelineProgress()`
+
 ---
 
 ## API Reference
+
+### Core Endpoints
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -163,7 +204,65 @@ Test ERC20 token with 6 decimals and public `mint()` function for local developm
 | GET | `/api/escrow/:taskId/status` | Get escrow status for a task |
 | POST | `/api/settlement/settle` | Settle a completed task (release + reputation + yield) |
 | GET | `/api/settlement/:taskId/status` | Get settlement status for a task |
-| WebSocket | `ws://<host>:<port>` | Real-time negotiation, task, and registry events |
+
+### Agent Investment Funds
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/fund/create` | Create investment fund for an agent |
+| POST | `/api/fund/:fundId/invest` | Invest USDC in a fund |
+| GET | `/api/fund/:fundId` | Get fund details by fund ID |
+| GET | `/api/fund/agent/:agentId` | Get fund details by agent ID |
+
+### Pipeline Orchestration
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/pipeline/create` | Create DAG pipeline with steps |
+| GET | `/api/pipeline/:pipelineId` | Get pipeline status and progress |
+| POST | `/api/pipeline/:pipelineId/decompose` | AI-powered task decomposition |
+
+### Market Data & Prediction Markets
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/market/prices` | Get dynamic capability prices |
+| GET | `/api/market/trades` | Get recent trade history |
+| GET | `/api/market/prediction-markets` | List active prediction markets |
+| GET | `/api/market/prediction-markets/:marketId` | Get market details |
+| POST | `/api/market/prediction-markets/:marketId/bet` | Place bet on market outcome |
+
+### Private Intent Matching
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/intent/submit` | Submit encrypted task intent |
+| POST | `/api/intent/:intentId/match` | Trigger AI agent matching |
+| GET | `/api/intent/:intentId` | Get intent status and matches |
+
+### AI Decision Transparency
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/ai/decisions` | Get AI decision log with filters |
+| GET | `/api/ai/status` | Get autonomous agent statuses |
+| POST | `/api/ai/decisions` | Record AI decision entry |
+| POST | `/api/ai/status` | Update agent heartbeat |
+
+### Platform Stats & Faucet
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/stats` | Get comprehensive platform statistics |
+| GET | `/api/stats/live` | Get real-time stats with delta changes |
+| POST | `/api/faucet/claim` | Claim 10 testnet USDC (24h rate limit) |
+| GET | `/api/faucet/status/:walletAddress` | Check faucet claim status |
+
+### WebSocket
+
+| Endpoint | Description |
+|----------|-------------|
+| `ws://<host>:<port>` | Real-time negotiation, task, and registry events |
 
 ---
 
@@ -285,81 +384,111 @@ arc-agent-registry/
 │   ├── AgentRegistry.sol         #   Agent registration & capability indexing
 │   ├── TaskEscrow.sol            #   USDC escrow, release, dispute, refund
 │   ├── ReputationOracle.sol      #   On-chain reputation scoring
+│   ├── AgentReputationMarket.sol #   Prediction markets on agent quality
+│   ├── AgentFund.sol             #   Investment fund & dividend distribution
+│   ├── AgentPipeline.sol         #   DAG-based task pipeline orchestration
 │   └── mocks/
 │       └── MockUSDC.sol          #   Test ERC20 token (local dev only)
 ├── scripts/
-│   └── deploy.js                 # Contract deployment (Arc Testnet aware)
-├── test/                         # Hardhat + backend test suite
+│   ├── deploy.js                 # Contract deployment (Arc Testnet aware)
+│   └── setup-trust.js            # Trust relationship setup
+├── test/                         # Hardhat + backend test suite (216 tests)
 │   ├── AgentRegistry.test.js     #   Registry unit tests
 │   ├── TaskEscrow.test.js        #   Escrow unit tests
-│   ├── ReputationOracle.test.js  #   Reputation oracle tests (#38)
+│   ├── ReputationOracle.test.js  #   Reputation oracle tests
+│   ├── AgentReputationMarket.test.js # Prediction market tests (45)
+│   ├── AgentFund.test.js         #   Investment fund tests (37)
+│   ├── AgentPipeline.test.js     #   Pipeline orchestration tests (47)
 │   ├── backend/
-│   │   ├── settlement.test.js    #   Settlement service tests (#38)
-│   │   ├── discovery.test.js     #   Discovery service tests (#38)
-│   │   └── negotiation.test.js   #   Negotiation agent tests (#38)
+│   │   ├── settlement.test.js    #   Settlement service tests
+│   │   ├── discovery.test.js     #   Discovery service tests
+│   │   └── negotiation.test.js   #   Negotiation agent tests
 │   └── e2e/
 │       └── full-flow.test.js     #   End-to-end integration test
 ├── backend/                      # Node.js + Express API server
 │   ├── server.js                 #   Express + WebSocket server entry
 │   ├── routes/
-│   │   ├── registry.routes.js    #   /api/registry/* endpoints
-│   │   ├── discovery.routes.js   #   /api/discovery/* endpoints
-│   │   ├── negotiation.routes.js #   /api/negotiation/* endpoints
-│   │   ├── escrow.routes.js      #   /api/escrow/* endpoints
-│   │   └── settlement.routes.js  #   /api/settlement/* endpoints
+│   │   ├── registry.routes.js    #   /api/registry/*
+│   │   ├── discovery.routes.js   #   /api/discovery/*
+│   │   ├── negotiation.routes.js #   /api/negotiation/*
+│   │   ├── escrow.routes.js      #   /api/escrow/*
+│   │   ├── settlement.routes.js  #   /api/settlement/*
+│   │   ├── fund.routes.js        #   /api/fund/*
+│   │   ├── pipeline.routes.js    #   /api/pipeline/*
+│   │   ├── market-data.routes.js #   /api/market/*
+│   │   ├── private-intent.routes.js #  /api/intent/*
+│   │   ├── agent-intelligence.routes.js # /api/ai/*
+│   │   ├── traction-stats.routes.js #  /api/stats/*
+│   │   └── faucet.routes.js      #   /api/faucet/*
 │   ├── services/
-│   │   ├── registry.service.js   #   Agent registration & query (Arc RPC)
-│   │   ├── discovery.service.js  #   AI-powered agent search & matching
+│   │   ├── registry.service.js   #   Agent registration & query
+│   │   ├── discovery.service.js  #   AI-powered agent matching
 │   │   ├── escrow.service.js     #   USDC deposit, release, dispute
-│   │   ├── settlement.service.js #   End-to-end settlement orchestration
-│   │   ├── reputation.service.js #   On-chain reputation via ReputationOracle
-│   │   ├── ipfs.service.js       #   IPFS/Pinata upload + local dev fallback
-│   │   ├── circle-wallet.service.js  # Wallet creation + on-chain balance
-│   │   ├── gateway.service.js    #   Cross-chain Gateway with CCTP support
-│   │   ├── paymaster.service.js  #   Circle Paymaster (USDC gas sponsorship)
-│   │   └── usyc.service.js       #   USYC yield via Teller contract
+│   │   ├── settlement.service.js #   Settlement orchestration
+│   │   ├── reputation.service.js #   On-chain reputation
+│   │   ├── ipfs.service.js       #   IPFS/Pinata + local fallback
+│   │   ├── circle-wallet.service.js  # Wallet + balance queries
+│   │   ├── gateway.service.js    #   Cross-chain Gateway (CCTP)
+│   │   ├── paymaster.service.js  #   USDC gas sponsorship
+│   │   ├── usyc.service.js       #   USYC yield via Teller
+│   │   ├── dynamic-pricing.service.js # Market-aware pricing
+│   │   ├── nanopayment-betting.service.js # Bet aggregation
+│   │   ├── yielding-escrow.service.js # Escrow + USYC yield
+│   │   ├── identity-passport.service.js # Agent passports
+│   │   ├── arc-native-identity.service.js # ERC-8004/8183
+│   │   └── private-intent.service.js # Encrypted matching
 │   ├── agents/
-│   │   ├── mulerun.client.js     #   Mulerun AI client (match/negotiate/validate)
-│   │   └── negotiation.agent.js  #   Multi-round auto-negotiation engine
+│   │   ├── mulerun.client.js     #   AI client (match/negotiate)
+│   │   ├── negotiation.agent.js  #   Auto-negotiation engine
+│   │   ├── real-negotiation.agent.js # Bayesian negotiation
+│   │   ├── autonomous-pricing.agent.js # Market intervention
+│   │   ├── market-maker.agent.js #   Prediction market MM
+│   │   └── orchestrator.agent.js #   Task decomposition
+│   ├── listeners/
+│   │   └── chain-listener.js     #   On-chain event listener
 │   ├── middleware/
-│   │   └── auth.middleware.js  #   Signature verification (EIP-191/EIP-712)
+│   │   └── auth.middleware.js    #   EIP-191/EIP-712 auth
 │   ├── config/
-│   │   └── redis.config.js       #   Cache keys & in-memory fallback
-│   └── abis/                     #   Contract ABI definitions
+│   │   └── redis.config.js       #   Redis + in-memory cache
+│   └── abis/                     #   Contract ABIs (synced)
 │       ├── AgentRegistry.json
 │       ├── TaskEscrow.json
 │       ├── ReputationOracle.json
+│       ├── AgentReputationMarket.json
+│       ├── AgentFund.json
+│       ├── AgentPipeline.json
 │       └── ERC20.json
 ├── frontend/                     # React + Tailwind CSS dashboard
 │   ├── src/
 │   │   ├── App.jsx               #   Router & page layout
 │   │   ├── pages/
 │   │   │   ├── Landing.jsx       #   Landing page (live stats)
-│   │   │   ├── Explore.jsx       #   Agent discovery (API-connected)
-│   │   │   ├── Register.jsx      #   Agent registration (API-connected)
-│   │   │   ├── Dashboard.jsx     #   Agent management (API-connected)
-│   │   │   ├── AgentDetail.jsx   #   Agent profile (API-connected)
-│   │   │   ├── NewTask.jsx       #   Task creation (API-connected)
-│   │   │   └── TaskDetail.jsx    #   Task detail (API-connected)
+│   │   │   ├── Explore.jsx       #   Agent discovery
+│   │   │   ├── Register.jsx      #   Agent registration
+│   │   │   ├── Dashboard.jsx     #   Agent management
+│   │   │   ├── AgentDetail.jsx   #   Agent profile
+│   │   │   ├── NewTask.jsx       #   Task creation
+│   │   │   └── TaskDetail.jsx    #   Task detail + escrow
 │   │   ├── components/
-│   │   │   ├── Layout.jsx        #   Navigation & page wrapper
+│   │   │   ├── Layout.jsx        #   Navigation & wrapper
 │   │   │   ├── AgentCard.jsx     #   Agent listing card
-│   │   │   ├── NegotiationFlow.jsx  # Real-time negotiation (WS + API)
-│   │   │   ├── EscrowStatus.jsx  #   Escrow state visualizer
-│   │   │   ├── ReputationStars.jsx  # Star rating display
+│   │   │   ├── NegotiationFlow.jsx  # Negotiation (WS + API)
+│   │   │   ├── EscrowStatus.jsx  #   Escrow visualizer
+│   │   │   ├── ReputationStars.jsx  # Star rating
 │   │   │   └── StatusBadge.jsx   #   Online/offline badge
 │   │   ├── hooks/
-│   │   │   └── useWebSocket.js   #   WebSocket connection hook
+│   │   │   └── useWebSocket.js   #   WebSocket hook
 │   │   └── services/
-│   │       └── api.js            #   Backend API client (full coverage)
+│   │       └── api.js            #   Backend API client
 │   └── public/
 │       └── index.html
 ├── database/
 │   └── schema.sql                # PostgreSQL schema
-├── deploy.sh                     # One-command deployment script
-├── docker-compose.yml            # Local dev services (PostgreSQL + Redis)
-├── hardhat.config.js             # Hardhat config (Arc Testnet ready)
-├── .env.example                  # Environment variable template
+├── deployed-addresses.json       # Contract addresses (Arc Testnet)
+├── deploy.sh                     # One-command deployment
+├── docker-compose.yml            # PostgreSQL + Redis
+├── hardhat.config.js             # Hardhat (Arc Testnet ready)
+├── .env.example                  # Environment template
 ├── .gitignore
 └── README.md
 ```
@@ -408,6 +537,11 @@ Discover --> Negotiate --> Escrow --> Complete --> Settle
 | **MatchAgent** | Performs semantic search across registered agents. Scores candidates by capability relevance, reputation, pricing, and availability. |
 | **NegotiatorAgent** | Conducts automated multi-round price negotiation between requester and provider agents to reach mutually acceptable terms. |
 | **ValidatorAgent** | Evaluates delivery quality against the original task specification. Produces a quality score that feeds into the reputation system. |
+| **AutonomousPricingAgent** | Monitors market supply/demand, detects imbalances, and intervenes with discovery boosts, fee adjustments, or price anomaly flags. Runs on 30-second loop. |
+| **MarketMakerAgent** | Provides liquidity to prediction markets using Kelly criterion bet sizing. Auto-rebalances positions hourly when probability shifts >15%. |
+| **OrchestratorAgent** | Decomposes complex tasks into DAG-based sub-tasks via AI. Monitors pipeline execution and handles failure recovery with up to 2 retries. |
+| **ProviderNegotiationAgent** | Bilateral negotiation agent for service providers. Uses Bayesian learning to update beliefs about requester's budget. |
+| **RequesterNegotiationAgent** | Bilateral negotiation agent for task requesters. Gradually increases offers toward budget ceiling using Bayesian updates. |
 
 ---
 
@@ -435,121 +569,84 @@ See `.env.example` for the full template. Key variables:
 
 ## Development Progress
 
-### Completed (v1.4.0)
+### Completed (v2.0.0)
 
-**Smart Contracts (13 items fixed):**
-- [x] `AgentRegistry.sol` — `register()` validates non-empty capabilities (#1)
-- [x] `AgentRegistry.sol` — `capabilityIndex` mapping is public (#2)
-- [x] `AgentRegistry.sol` — `updateReputation()` uses `bool incrementTaskCount` (#3)
-- [x] `TaskEscrow.sol` — `platformFeesBps` is mutable with `setPlatformFee()` (#4)
-- [x] `TaskEscrow.sol` — `Task` struct includes `taskId` and `lockedAt` (#5)
-- [x] `AgentRegistry.sol` — Struct field renamed to `registeredAt` (#6)
-- [x] `AgentRegistry.sol` — Mapping renamed to `addressToAgentId` (#7)
-- [x] `AgentRegistry.sol` — `AgentRegistered` event includes `timestamp` (#8)
-- [x] `TaskEscrow.sol` — `deposit()` follows checks-effects-interactions (#9)
-- [x] `TaskEscrow.sol` — Event signatures match doc spec (#10)
-- [x] `ReputationOracle.sol` — `lastUpdated` field added (#11)
-- [x] `ReputationOracle.sol` — `cumulativeScore` + `agentId` fields (#12)
-- [x] `ReputationOracle.sol` — `setTrusted()` renamed (#13)
+**Smart Contracts (6 contracts deployed to Arc Testnet):**
+- [x] `AgentRegistry.sol` — Agent registration, capability indexing, trust management
+- [x] `TaskEscrow.sol` — USDC escrow with adjustable platform fee (0.5% default)
+- [x] `ReputationOracle.sol` — Cumulative reputation scoring with rating history
+- [x] `AgentReputationMarket.sol` — Prediction markets on agent quality scores
+- [x] `AgentFund.sol` — Agent investment funds with pro-rata dividends
+- [x] `AgentPipeline.sol` — DAG-based task pipeline orchestration
+- [x] All contracts deployed and verified on Arc Testnet (Chain ID 5042002)
+- [x] Trust relationships established between contracts
 
-**Backend Services (7 items fixed):**
-- [x] `mulerun.client.js` — AI-driven scoring, negotiation, validation with DeepSeek V4 (#14)
-- [x] `negotiation.agent.js` — Multi-factor evaluation: load, complexity, history, urgency (#15)
-- [x] All routes — Signature verification middleware added (#16)
-- [x] `gateway.service.js` — CCTP cross-chain transfer verified (#17)
-- [x] `registry.service.js` — Full metadata validation per doc spec (#18)
-- [x] `registry.service.js` — `getAgentInfo()` returns nested `onchain` structure (#19)
-- [x] `discovery.service.js` — All 7 DiscoveryFilter fields supported (#20)
+**Backend (12 route modules, 16 services, 6 AI agents):**
+- [x] Core routes: registry, discovery, negotiation, escrow, settlement
+- [x] Extended routes: fund, pipeline, market-data, private-intent, agent-intelligence, traction-stats, faucet
+- [x] Core services: registry, discovery, escrow, settlement, reputation, IPFS
+- [x] Circle services: wallet, gateway (CCTP), paymaster, USYC yield
+- [x] Extended services: dynamic-pricing, nanopayment-betting, yielding-escrow, identity-passport, arc-native-identity, private-intent
+- [x] AI agents: mulerun client, negotiation, real-negotiation, autonomous-pricing, market-maker, orchestrator
+- [x] Chain event listener with WebSocket reconnection
+- [x] EIP-191/EIP-712 signature verification middleware
+- [x] Redis caching with in-memory fallback
+- [x] WebSocket real-time events with topic subscriptions
 
-**Additional fixes included:**
-- [x] Escrow release response includes `settlementTime`, `providerReceived`, `platformFee` (#22)
-- [x] Escrow deposit response includes `escrowId`, `unlockConditions` (#23)
-- [x] Negotiation routes accept doc-style field names (#25)
-- [x] Availability endpoint accepts `isOnline` parameter (#26)
+**Frontend (7 pages, 6 components):**
+- [x] All pages connected to backend API with loading/error states
+- [x] WebSocket integration for real-time updates
+- [x] Agent registration wizard (4-step)
+- [x] Agent discovery with filters
+- [x] Negotiation flow with counter-offers
+- [x] Escrow status visualization
+- [x] Dashboard with stats, tasks, and earnings tabs
 
-**Batch 3 - Backend Enhancements (5 items):**
-- [x] `settlement.service.js` — Decay-factor weighted moving average (DECAY_FACTOR=0.95) (#21)
-- [x] `usyc.service.js` — `yieldEarned` field in USYC redeem response (#24)
-- [x] `server.js` + `useWebSocket.js` — Batch subscription with `{ action, topics }` format (#27)
-- [x] `server.js` + routes — All WebSocket event types: `negotiation_proposed`, `task_completed`, `escrow_locked` (#28)
-- [x] `redis.config.js` — ioredis connection with `REDIS_URL`, fallback to in-memory Map (#29)
+**Tests (216 passing):**
+- [x] AgentRegistry — 21 tests (registration, search, reputation, access control)
+- [x] TaskEscrow — 14 tests (deposit, release, refund, dispute, fees)
+- [x] ReputationOracle — 12 tests (ratings, history, trusted callers)
+- [x] AgentReputationMarket — 45 tests (markets, bets, resolution, claims)
+- [x] AgentFund — 37 tests (funds, investment, dividends, refunds)
+- [x] AgentPipeline — 47 tests (DAG, nodes, dependencies, recovery)
+- [x] Backend services — 29 tests (settlement, discovery, negotiation)
+- [x] E2E full flow — 3 tests (register → deposit → release → reputation)
 
-**Batch 4 - Config & Infrastructure (4 items):**
-- [x] `.env.example` + services — Variable names aligned with doc spec (`IPFS_API_URL`, `IPFS_PROJECT_ID`, `IPFS_PROJECT_SECRET`, `ARC_RPC_URL`, `USDC_ADDRESS`) (#30)
-- [x] `database/schema.sql` — `agent_id BIGINT UNIQUE NOT NULL`, `reputation_score DECIMAL(3,2)` (#31)
-- [x] `database/schema.sql` — negotiations/tasks use `VARCHAR(100) UNIQUE` instead of UUID (#32)
-- [x] `package.json` — Added npm scripts: `dev:server`, `dev:client`, `dev:listener`, `db:migrate` (#35)
-- [x] `hardhat.config.js` — Network renamed from `arcTestnet` to `arc-testnet` (kebab-case) (#36)
-- [x] `deploy.sh` — Frontend build, conditional contract deploy, Railway/Vercel deployment (#37)
-
-**Batch 5 - Frontend & Tests (3 items):**
-- [x] Frontend pages connected to real API (#33)
-- [x] `NegotiationFlow.jsx` — Replaced inline WebSocket with `useWebSocket` hook (#34)
-- [x] Test modules added: ReputationOracle, Settlement, Discovery, Negotiation (#38)
-
-**Previously completed (v1.2.0):**
-- [x] Hardhat config with correct Arc Testnet parameters (Chain ID 5042002)
-- [x] Deploy script using real USDC on Arc Testnet
-- [x] All backend services connected to Arc Testnet RPC
-- [x] Gateway service with CCTP cross-chain transfer implementation
-- [x] IPFS service with local file storage fallback
-- [x] USYC yield service with Teller contract integration
-- [x] Paymaster service with USDC gas model
-- [x] Circle wallet service with on-chain balance queries
-- [x] All frontend pages connected to backend API
-- [x] NegotiationFlow component with real WebSocket + API polling
-- [x] Settlement service with cross-chain fund consolidation via CCTP
-- [x] Landing page with real-time stats and Arc Testnet info
-
-### All 38 Items Complete
-
-All items from the development specification audit have been implemented and verified.
-
-## Test Results (87 passing)
+## Test Results (216 passing)
 
 ```
 AgentRegistry (21 tests)
-  - Registration: register, event, duplicate prevention, validation, capabilities check
-  - Capability Search: by hash, multiple agents, public capabilityIndex
-  - Metadata Update: CID update, authorization
-  - Availability: toggle, authorization
-  - Reputation: trusted update, bool increment, untrusted rejection, range validation
+  Registration, capability search, metadata, availability, reputation
 
 TaskEscrow (14 tests)
-  - Deposit: lock funds, duplicates, validation, struct fields (taskId, lockedAt)
-  - Release: fee calculation, authorization, status check
-  - Refund: timeout, premature rejection
-  - Dispute: requester, provider, third-party rejection
-  - Platform Fee: setPlatformFee, max cap, owner-only
+  Deposit, release, refund, dispute, platform fee management
 
 ReputationOracle (12 tests)
-  - Trusted caller management: set, revoke, authorization
-  - Rating submission: valid, out-of-range, untrusted, cumulative, lastUpdated
-  - Average score: default, single, multiple ratings
-  - Rating history: track, empty
-  - Multi-agent isolation
+  Trusted callers, rating submission, average score, history, isolation
+
+AgentReputationMarket (45 tests)
+  Market creation, bet placement, batch bets, resolution, winnings,
+  implied probability, fee management, access control
+
+AgentFund (37 tests)
+  Fund creation, eligibility (rep ≥ 4.20, tasks ≥ 20), investment,
+  auto-release, dividends, expiry refund, deactivation
+
+AgentPipeline (47 tests)
+  Pipeline creation, DAG submission, node lifecycle, dependencies,
+  failure/retry, orchestrator fees, emergency refund, progress
 
 SettlementService (5 tests)
-  - Decay-factor algorithm: DECAY_FACTOR=0.95, formula verification
-  - Settlement flow: basic, USYC yield, skip yield
+  Decay-factor algorithm (DECAY_FACTOR=0.95), settlement flow
 
 DiscoveryService (16 tests)
-  - Smart search: all agents, matchScore, limit
-  - Filters: capability, maxPrice, minReputationScore, minSuccessRate,
-             availableOnly, language, tags, free-text search
-  - Combined filters, relevance scoring
+  Smart search, 7 filter dimensions, combined filters, scoring
 
 NegotiationAgent (8 tests)
-  - Proposal handling: valid, status retrieval, not-found
-  - Accept/reject: pending proposals
-  - Counter-offers: pending negotiations
-  - Field name normalization: doc-spec fields
-  - Multiple concurrent negotiations
+  Proposals, accept/reject, counter-offers, field normalization
 
 E2E Full Flow (3 tests)
-  - Register -> Deposit -> Release -> Balances -> Reputation
-  - addressToAgentId mapping verification
-  - ReputationRecord fields (lastUpdated, cumulativeScore)
+  Register -> Deposit -> Release -> Balances -> Reputation
 ```
 
 ---
