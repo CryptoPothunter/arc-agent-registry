@@ -1,12 +1,14 @@
 /**
  * Negotiation Routes - agent-to-agent negotiation endpoints.
+ * #16: Added signature verification.
+ * #25: Field names aligned with doc spec (requesterId, providerId, offeredPrice, capability, input).
  */
 
 const express = require('express');
 const router = express.Router();
 const { NegotiationAgent } = require('../agents/negotiation.agent');
+const { verifySignature } = require('../middleware/auth.middleware');
 
-// Instantiated with wsNotify in server.js via app.locals
 let negotiationAgent = null;
 
 function getAgent(req) {
@@ -21,42 +23,63 @@ function getAgent(req) {
 /**
  * POST /propose
  * Submit a negotiation proposal.
+ * #25: Support both doc-style and legacy field names.
  */
-router.post('/propose', async (req, res, next) => {
+router.post('/propose', verifySignature({ addressField: 'requesterId', optional: true }), async (req, res, next) => {
   try {
     const agent = getAgent(req);
     const {
+      // Doc-style field names (#25)
+      requesterId,
+      providerId,
+      capability,
+      input,
+      offeredPrice,
+      // Legacy field names (backward compat)
       fromAgentId,
       toAgentId,
-      taskDescription,
       proposedPrice,
+      // Common
+      taskDescription,
       deadline,
       agentConfig,
     } = req.body;
 
-    if (!fromAgentId || !toAgentId) {
-      return res.status(400).json({ error: 'fromAgentId and toAgentId are required' });
+    // Normalize field names
+    const reqId = requesterId || fromAgentId;
+    const provId = providerId || toAgentId;
+    const price = offeredPrice || proposedPrice;
+
+    if (!reqId || !provId) {
+      return res.status(400).json({ error: 'requesterId and providerId are required' });
     }
     if (!taskDescription) {
       return res.status(400).json({ error: 'taskDescription is required' });
     }
-    if (proposedPrice === undefined || typeof proposedPrice !== 'number') {
-      return res.status(400).json({ error: 'proposedPrice must be a number' });
+    if (price === undefined || typeof price !== 'number') {
+      return res.status(400).json({ error: 'offeredPrice must be a number' });
     }
 
-    const negotiationId = `neg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const negotiationId = `neg_0x${Date.now().toString(16)}${Math.random().toString(16).slice(2, 10)}`;
 
     const result = await agent.handleIncomingProposal({
       negotiationId,
-      fromAgentId,
-      toAgentId,
+      requesterId: reqId,
+      providerId: provId,
+      capability: capability || '',
       taskDescription,
-      proposedPrice,
+      input: input || {},
+      offeredPrice: price,
       deadline: deadline || Math.floor(Date.now() / 1000) + 86400,
       agentConfig: agentConfig || {},
     });
 
-    res.status(201).json({ success: true, negotiation: result });
+    res.status(201).json({
+      success: true,
+      negotiationId: result.negotiationId,
+      status: result.status,
+      expiresAt: result.expiresAt,
+    });
   } catch (err) {
     next(err);
   }
@@ -71,7 +94,16 @@ router.get('/:negotiationId/status', async (req, res, next) => {
     const agent = getAgent(req);
     const { negotiationId } = req.params;
     const negotiation = agent.getStatus(negotiationId);
-    res.json({ success: true, negotiation });
+
+    res.json({
+      success: true,
+      negotiationId: negotiation.negotiationId,
+      status: negotiation.status,
+      agreedPrice: negotiation.agreedPrice || null,
+      agreedDeadline: negotiation.deadline ? new Date(negotiation.deadline * 1000).toISOString() : null,
+      agreementHash: negotiation.agreementHash || null,
+      rounds: negotiation.round,
+    });
   } catch (err) {
     if (err.message.includes('not found')) {
       return res.status(404).json({ error: err.message });
@@ -84,11 +116,11 @@ router.get('/:negotiationId/status', async (req, res, next) => {
  * POST /:negotiationId/respond
  * Respond to a negotiation (accept, counter, reject).
  */
-router.post('/:negotiationId/respond', async (req, res, next) => {
+router.post('/:negotiationId/respond', verifySignature({ optional: true }), async (req, res, next) => {
   try {
     const agent = getAgent(req);
     const { negotiationId } = req.params;
-    const { action, counterPrice, reason, fromAgentId } = req.body;
+    const { action, counterPrice, reason, fromAgentId, requesterId } = req.body;
 
     if (!action) {
       return res.status(400).json({ error: 'action is required (accept, counter, reject)' });
@@ -105,7 +137,7 @@ router.post('/:negotiationId/respond', async (req, res, next) => {
         if (counterPrice === undefined || typeof counterPrice !== 'number') {
           return res.status(400).json({ error: 'counterPrice is required for counter action' });
         }
-        result = await agent.handleCounterOffer(negotiationId, fromAgentId, counterPrice);
+        result = await agent.handleCounterOffer(negotiationId, fromAgentId || requesterId, counterPrice);
         break;
 
       case 'reject':

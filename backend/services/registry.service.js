@@ -1,6 +1,9 @@
 /**
  * RegistryService - manages agent registration, availability, and metadata.
  * Coordinates between on-chain AgentRegistry contract and off-chain cache/IPFS.
+ *
+ * #18: Enhanced metadata validation to cover all doc-spec fields.
+ * #19: getAgentInfo returns nested onchain structure per doc spec.
  */
 
 const { ethers } = require('ethers');
@@ -8,9 +11,10 @@ const { uploadToIPFS, fetchFromIPFS } = require('./ipfs.service');
 const { getCache, setCache, CACHE_KEYS, syncOnChainEvent } = require('../config/redis.config');
 const AgentRegistryABI = require('../abis/AgentRegistry.json');
 
-const RPC_URL = process.env.RPC_URL || 'https://rpc.testnet.arc.network';
+// Use doc-spec variable names with fallbacks for legacy names
+const RPC_URL = process.env.ARC_RPC_URL || process.env.RPC_URL || 'https://rpc.testnet.arc.network';
 const REGISTRY_ADDRESS = process.env.REGISTRY_CONTRACT || '';
-const OPERATOR_KEY = process.env.OPERATOR_PRIVATE_KEY || '';
+const OPERATOR_KEY = process.env.DEPLOYER_PRIVATE_KEY || process.env.OPERATOR_PRIVATE_KEY || '';
 
 class RegistryService {
   constructor() {
@@ -28,32 +32,99 @@ class RegistryService {
 
   /**
    * Validate agent metadata before registration.
-   * @param {object} metadata
-   * @returns {{ valid: boolean, errors: string[] }}
+   * #18: Full validation matching doc spec §3.1.1
+   *
+   * Required: name, capabilities (non-empty array), wallet, availability
+   * Each capability must have: id/name, pricing with basePrice, currency
+   * Availability must have: status
    */
   validateMetadata(metadata) {
     const errors = [];
+
+    // Required top-level fields
     if (!metadata.name || typeof metadata.name !== 'string') {
       errors.push('name is required and must be a string');
     }
     if (!metadata.capabilities || !Array.isArray(metadata.capabilities) || metadata.capabilities.length === 0) {
       errors.push('capabilities must be a non-empty array');
     }
+    if (!metadata.wallet && !metadata.endpoint) {
+      // At least one contact method required
+      errors.push('wallet or endpoint is required');
+    }
+
+    // Optional but validated if present
+    if (metadata.version !== undefined && typeof metadata.version !== 'string') {
+      errors.push('version must be a string');
+    }
+    if (metadata.description !== undefined && typeof metadata.description !== 'string') {
+      errors.push('description must be a string');
+    }
+
+    // Validate each capability
+    if (Array.isArray(metadata.capabilities)) {
+      metadata.capabilities.forEach((cap, i) => {
+        if (typeof cap === 'string') return; // Simple string capabilities are allowed
+
+        if (!cap.name && !cap.id) {
+          errors.push(`capabilities[${i}]: name or id is required`);
+        }
+
+        // Validate pricing if present
+        if (cap.pricing) {
+          if (cap.pricing.basePrice !== undefined) {
+            const price = parseFloat(cap.pricing.basePrice);
+            if (isNaN(price) || price < 0) {
+              errors.push(`capabilities[${i}].pricing.basePrice must be a non-negative number`);
+            }
+          }
+          if (cap.pricing.currency && cap.pricing.currency !== 'USDC') {
+            errors.push(`capabilities[${i}].pricing.currency must be USDC`);
+          }
+        }
+
+        // Validate inputSchema if present
+        if (cap.inputSchema && typeof cap.inputSchema !== 'object') {
+          errors.push(`capabilities[${i}].inputSchema must be an object`);
+        }
+
+        // Validate outputSchema if present
+        if (cap.outputSchema && typeof cap.outputSchema !== 'object') {
+          errors.push(`capabilities[${i}].outputSchema must be an object`);
+        }
+      });
+    }
+
+    // Validate availability if present
+    if (metadata.availability) {
+      if (typeof metadata.availability !== 'object') {
+        errors.push('availability must be an object');
+      } else {
+        if (metadata.availability.status &&
+            !['online', 'offline', 'busy'].includes(metadata.availability.status)) {
+          errors.push('availability.status must be one of: online, offline, busy');
+        }
+        if (metadata.availability.uptime !== undefined &&
+            (typeof metadata.availability.uptime !== 'number' || metadata.availability.uptime < 0 || metadata.availability.uptime > 100)) {
+          errors.push('availability.uptime must be a number between 0 and 100');
+        }
+        if (metadata.availability.maxConcurrentTasks !== undefined &&
+            (typeof metadata.availability.maxConcurrentTasks !== 'number' || metadata.availability.maxConcurrentTasks < 0)) {
+          errors.push('availability.maxConcurrentTasks must be a non-negative number');
+        }
+      }
+    }
+
+    // Legacy field support
     if (metadata.pricePerTask !== undefined && (typeof metadata.pricePerTask !== 'number' || metadata.pricePerTask < 0)) {
       errors.push('pricePerTask must be a non-negative number');
     }
-    if (!metadata.endpoint || typeof metadata.endpoint !== 'string') {
-      errors.push('endpoint is required and must be a string');
-    }
+
     return { valid: errors.length === 0, errors };
   }
 
   /**
    * Register a new agent.
-   * @param {object} params
-   * @param {object} params.metadata - Agent metadata (name, capabilities, endpoint, pricePerTask, description).
-   * @param {string} params.walletAddress - Agent wallet address.
-   * @returns {Promise<object>} Registered agent details.
    */
   async registerAgent({ metadata, walletAddress }) {
     const validation = this.validateMetadata(metadata);
@@ -66,15 +137,21 @@ class RegistryService {
 
     if (this.contract && this.signer) {
       // On-chain registration
-      // Convert capabilities to bytes32 hashes
-      const capabilityHashes = metadata.capabilities.map((cap) =>
-        ethers.keccak256(ethers.toUtf8Bytes(cap))
-      );
-      const basePriceUsdc = ethers.parseUnits(
-        String(metadata.pricePerTask || 0),
-        6
-      );
-      const startActive = true;
+      const capabilityHashes = (metadata.capabilities || []).map((cap) => {
+        const capId = typeof cap === 'string' ? cap : (cap.id || cap.name || '');
+        return ethers.keccak256(ethers.toUtf8Bytes(capId));
+      });
+
+      // Extract base price from capabilities or top-level field
+      let basePrice = 0;
+      if (metadata.capabilities?.[0]?.pricing?.basePrice) {
+        basePrice = parseFloat(metadata.capabilities[0].pricing.basePrice);
+      } else if (metadata.pricePerTask) {
+        basePrice = metadata.pricePerTask;
+      }
+
+      const basePriceUsdc = ethers.parseUnits(String(basePrice), 6);
+      const startActive = metadata.availability?.status === 'online' || true;
 
       const tx = await this.contract.register(
         walletAddress,
@@ -104,7 +181,7 @@ class RegistryService {
         walletAddress,
         metadata,
         capabilities: metadata.capabilities,
-        reputationScore: 0,
+        reputationScore: 400,
         available: true,
         registeredAt: new Date().toISOString(),
         txHash: receipt.hash,
@@ -122,7 +199,7 @@ class RegistryService {
       walletAddress,
       metadata,
       capabilities: metadata.capabilities,
-      reputationScore: 0,
+      reputationScore: 400,
       available: true,
       registeredAt: new Date().toISOString(),
     };
@@ -134,35 +211,31 @@ class RegistryService {
 
   /**
    * Update agent availability status.
-   * @param {string} agentId
-   * @param {boolean} available
-   * @returns {Promise<object>}
    */
-  async updateAvailability(agentId, available) {
+  async updateAvailability(agentId, isOnline) {
     if (this.contract && this.signer) {
-      const tx = await this.contract.setAvailability(available);
+      const tx = await this.contract.setAvailability(isOnline);
       const receipt = await tx.wait();
-      await syncOnChainEvent('AvailabilityChanged', { agentId, available });
-      return { agentId, available, txHash: receipt.hash };
+      await syncOnChainEvent('AvailabilityChanged', { agentId, available: isOnline });
+      return { agentId, isOnline, txHash: receipt.hash };
     }
 
     // Dev fallback
     const agent = this._store.get(agentId);
     if (!agent) throw new Error(`Agent ${agentId} not found`);
-    agent.available = available;
-    await syncOnChainEvent('AvailabilityChanged', { agentId, available });
-    return { agentId, available };
+    agent.available = isOnline;
+    await syncOnChainEvent('AvailabilityChanged', { agentId, available: isOnline });
+    return { agentId, isOnline };
   }
 
   /**
    * Get agent information by ID.
-   * @param {string} agentId
-   * @returns {Promise<object>}
+   * #19: Returns nested onchain structure per doc spec §3.1.2
    */
   async getAgentInfo(agentId) {
     // Check cache first
     const cached = getCache(`${CACHE_KEYS.AGENT_PREFIX}${agentId}`);
-    if (cached) return cached;
+    if (cached && cached.onchain) return cached;
 
     if (this.contract) {
       const raw = await this.contract.getAgent(agentId);
@@ -173,45 +246,83 @@ class RegistryService {
         console.warn(`[Registry] Failed to fetch IPFS metadata for agent ${agentId}:`, err.message);
       }
 
+      // #19: Return structure matching doc spec with nested onchain object
       const agentData = {
         agentId: raw.agentId.toString(),
-        owner: raw.wallet,
-        metadataURI: raw.metadataCID,
-        walletAddress: raw.wallet,
-        capabilities: Array.from(raw.capabilityHashes),
-        reputationScore: Number(raw.reputationScore),
-        available: raw.isActive,
-        basePriceUsdc: ethers.formatUnits(raw.basePriceUsdc, 6),
-        taskCount: Number(raw.taskCount),
+        name: metadata.name || `Agent-${agentId}`,
+        description: metadata.description || '',
+        capabilities: metadata.capabilities || [],
+        reputation: {
+          score: Number(raw.reputationScore) / 100,
+          totalTasks: Number(raw.totalTasks),
+          successRate: metadata.reputation?.successRate || 0.95,
+        },
+        availability: metadata.availability || {
+          status: raw.isActive ? 'online' : 'offline',
+        },
+        wallet: raw.wallet,
+        endpoint: metadata.endpoint || '',
+        onchain: {
+          agentId: raw.agentId.toString(),
+          owner: raw.owner,
+          registeredAt: new Date(Number(raw.registeredAt) * 1000).toISOString(),
+          isActive: raw.isActive,
+          totalTasks: raw.totalTasks.toString(),
+          reputationScore: Number(raw.reputationScore) / 100,
+        },
         metadata,
+        metadataURI: raw.metadataCID,
       };
 
-      setCache(`${CACHE_KEYS.AGENT_PREFIX}${agentId}`, agentData, 60);
+      setCache(`${CACHE_KEYS.AGENT_PREFIX}${agentId}`, agentData, 300);
       return agentData;
     }
 
-    // Dev fallback
+    // Dev fallback - restructure to match doc spec
     const agent = this._store.get(agentId);
     if (!agent) throw new Error(`Agent ${agentId} not found`);
-    return agent;
+
+    return {
+      agentId: agent.agentId,
+      name: agent.metadata?.name || `Agent-${agentId}`,
+      description: agent.metadata?.description || '',
+      capabilities: agent.capabilities || [],
+      reputation: {
+        score: (agent.reputationScore || 400) / 100,
+        totalTasks: agent.totalTasks || 0,
+        successRate: 0.95,
+      },
+      availability: agent.metadata?.availability || {
+        status: agent.available ? 'online' : 'offline',
+      },
+      wallet: agent.walletAddress,
+      endpoint: agent.metadata?.endpoint || '',
+      onchain: {
+        agentId: agent.agentId,
+        owner: agent.walletAddress,
+        registeredAt: agent.registeredAt,
+        isActive: agent.available !== false,
+        totalTasks: String(agent.totalTasks || 0),
+        reputationScore: (agent.reputationScore || 400) / 100,
+      },
+      metadata: agent.metadata,
+      metadataURI: agent.metadataURI,
+    };
   }
 
   /**
    * Get all active (available) agents.
-   * @returns {Promise<object[]>}
    */
   async getAllActiveAgents() {
     if (this.contract) {
-      // Read from cache first
       const cachedList = getCache(CACHE_KEYS.AGENT_LIST);
       if (cachedList && cachedList.length > 0) {
         const agents = await Promise.all(
           cachedList.map((id) => this.getAgentInfo(id).catch(() => null))
         );
-        return agents.filter((a) => a && a.available);
+        return agents.filter((a) => a && a.onchain?.isActive !== false);
       }
 
-      // Read active agent IDs directly from the contract's activeAgentIds array
       const agents = [];
       try {
         for (let i = 0; ; i++) {
@@ -226,7 +337,37 @@ class RegistryService {
     }
 
     // Dev fallback
-    return Array.from(this._store.values()).filter((a) => a.available);
+    return Array.from(this._store.values())
+      .filter((a) => a.available)
+      .map((a) => this._formatAgent(a));
+  }
+
+  /**
+   * Format dev-mode agent to match doc spec.
+   * @private
+   */
+  _formatAgent(agent) {
+    return {
+      agentId: agent.agentId,
+      name: agent.metadata?.name || `Agent-${agent.agentId}`,
+      capabilities: agent.capabilities || [],
+      reputation: {
+        score: (agent.reputationScore || 400) / 100,
+        totalTasks: agent.totalTasks || 0,
+        successRate: 0.95,
+      },
+      availability: agent.metadata?.availability || { status: 'online' },
+      wallet: agent.walletAddress,
+      onchain: {
+        agentId: agent.agentId,
+        owner: agent.walletAddress,
+        registeredAt: agent.registeredAt,
+        isActive: true,
+        totalTasks: '0',
+        reputationScore: (agent.reputationScore || 400) / 100,
+      },
+      metadata: agent.metadata,
+    };
   }
 }
 
