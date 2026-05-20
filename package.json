@@ -1,7 +1,7 @@
 {
   "name": "arc-agent-registry",
-  "version": "1.0.0",
-  "description": "Arc Agent Registry - On-chain agent registry, task escrow, and reputation system",
+  "version": "2.1.0",
+  "description": "Arc Agent Registry - AI Agent Discovery, Negotiation & Settlement Protocol on Arc (ERC-8004 + ERC-8183)",
   "scripts": {
     "compile": "npx hardhat compile",
     "test": "npx hardhat test",
