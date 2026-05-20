@@ -1,14 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-
-const mockAgents = [
-  { id: '1', name: 'PixelForge' },
-  { id: '2', name: 'CodeSentinel' },
-  { id: '3', name: 'LinguaBot' },
-  { id: '4', name: 'DataMiner' },
-  { id: '5', name: 'VoiceCraft' },
-  { id: '6', name: 'ChainGuard' },
-];
+import { getAgents, proposeNegotiation } from '../services/api';
 
 export default function NewTask() {
   const navigate = useNavigate();
@@ -22,12 +14,67 @@ export default function NewTask() {
     deadline: '',
   });
 
+  const [agents, setAgents] = useState([]);
+  const [loadingAgents, setLoadingAgents] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState(null);
+
+  // Fetch agents list for the dropdown
+  useEffect(() => {
+    async function fetchAgentList() {
+      try {
+        const result = await getAgents();
+        const list = (result.agents || result || []).map((a) => ({
+          id: a.agentId || a.id,
+          name: a.metadata?.name || a.name || `Agent ${a.agentId}`,
+        }));
+        setAgents(list);
+      } catch (err) {
+        console.error('Failed to fetch agents:', err);
+        // Provide empty list on error
+        setAgents([]);
+      } finally {
+        setLoadingAgents(false);
+      }
+    }
+    fetchAgentList();
+  }, []);
+
   const update = (field, value) => setForm((f) => ({ ...f, [field]: value }));
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // In a real app this would POST to the API
-    navigate(`/tasks/demo-task-001`);
+    setSubmitting(true);
+    setSubmitError(null);
+
+    try {
+      // Calculate deadline as Unix timestamp
+      const deadlineTimestamp = form.deadline
+        ? Math.floor(new Date(form.deadline).getTime() / 1000)
+        : Math.floor(Date.now() / 1000) + 86400; // Default: 24 hours
+
+      const result = await proposeNegotiation({
+        fromAgentId: 'requester',
+        toAgentId: form.agentId,
+        taskDescription: form.description,
+        proposedPrice: Number(form.budget),
+        deadline: deadlineTimestamp,
+        agentConfig: {},
+      });
+
+      // Navigate to the task/negotiation detail view
+      const negotiationId = result.negotiation?.negotiationId || result.negotiationId;
+      if (negotiationId) {
+        navigate(`/tasks/${negotiationId}`);
+      } else {
+        navigate('/dashboard/tasks');
+      }
+    } catch (err) {
+      console.error('Task creation failed:', err);
+      setSubmitError(err.message || 'Failed to create task. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const isValid = form.agentId && form.description && form.budget;
@@ -45,12 +92,18 @@ export default function NewTask() {
             className="input-field"
             value={form.agentId}
             onChange={(e) => update('agentId', e.target.value)}
+            disabled={loadingAgents}
           >
-            <option value="">Choose an agent...</option>
-            {mockAgents.map((a) => (
+            <option value="">
+              {loadingAgents ? 'Loading agents...' : 'Choose an agent...'}
+            </option>
+            {agents.map((a) => (
               <option key={a.id} value={a.id}>{a.name}</option>
             ))}
           </select>
+          {!loadingAgents && agents.length === 0 && (
+            <p className="text-xs text-gray-400 mt-1">No agents registered yet. <a href="/register" className="text-primary-600 hover:underline">Register one first.</a></p>
+          )}
         </div>
 
         {/* Task Description */}
@@ -92,14 +145,21 @@ export default function NewTask() {
           />
         </div>
 
+        {/* Error display */}
+        {submitError && (
+          <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-sm text-red-700">{submitError}</p>
+          </div>
+        )}
+
         {/* Submit */}
         <div className="pt-4 border-t border-gray-100">
           <button
             type="submit"
-            disabled={!isValid}
+            disabled={!isValid || submitting}
             className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Submit &amp; Start Negotiation
+            {submitting ? 'Creating Task...' : 'Submit & Start Negotiation'}
           </button>
           <p className="text-xs text-gray-400 text-center mt-3">
             Submitting will initiate a real-time price negotiation with the selected agent.
