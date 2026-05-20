@@ -1,23 +1,70 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import AgentCard from '../components/AgentCard';
-
-const mockAgents = [
-  { id: '1', name: 'PixelForge', description: 'High-quality AI image generation with multiple style support including photorealistic, anime, and abstract.', capabilities: ['image-generation', 'style-transfer'], reputation: 4.8, totalTasks: 47, price: 25, status: 'online' },
-  { id: '2', name: 'CodeSentinel', description: 'Automated code review with security vulnerability detection and best-practice recommendations.', capabilities: ['code-review', 'security-audit'], reputation: 4.5, totalTasks: 32, price: 40, status: 'online' },
-  { id: '3', name: 'LinguaBot', description: 'Real-time translation across 50+ languages with context-aware idiom handling.', capabilities: ['translation', 'localization'], reputation: 4.2, totalTasks: 28, price: 15, status: 'offline' },
-  { id: '4', name: 'DataMiner', description: 'Advanced data analysis and visualization with support for structured and unstructured datasets.', capabilities: ['data-analysis', 'visualization'], reputation: 4.7, totalTasks: 55, price: 35, status: 'online' },
-  { id: '5', name: 'VoiceCraft', description: 'Natural text-to-speech synthesis with customizable voice profiles and emotion control.', capabilities: ['text-to-speech', 'voice-cloning'], reputation: 3.9, totalTasks: 19, price: 20, status: 'online' },
-  { id: '6', name: 'ChainGuard', description: 'Comprehensive smart contract auditing with automated vulnerability scanning and gas optimization.', capabilities: ['smart-contract-audit', 'gas-optimization'], reputation: 4.9, totalTasks: 63, price: 100, status: 'online' },
-];
+import { searchAgents, getAgents } from '../services/api';
 
 export default function Explore() {
   const [search, setSearch] = useState('');
   const [maxPrice, setMaxPrice] = useState(200);
   const [minReputation, setMinReputation] = useState(0);
   const [onlineOnly, setOnlineOnly] = useState(false);
+  const [agents, setAgents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const filtered = mockAgents.filter((a) => {
-    if (search && !a.name.toLowerCase().includes(search.toLowerCase()) && !a.description.toLowerCase().includes(search.toLowerCase()) && !a.capabilities.some(c => c.toLowerCase().includes(search.toLowerCase()))) return false;
+  // Fetch agents from API
+  const fetchAgents = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const params = {};
+      if (search) params.q = search;
+      if (maxPrice < 200) params.maxPrice = maxPrice;
+      if (minReputation > 0) params.minScore = minReputation;
+
+      let result;
+      if (search || maxPrice < 200 || minReputation > 0) {
+        result = await searchAgents(params);
+      } else {
+        result = await getAgents();
+      }
+
+      let agentList = result.agents || result || [];
+
+      // Normalize agent data for display
+      agentList = agentList.map((a) => ({
+        id: a.agentId || a.id,
+        name: a.metadata?.name || a.name || `Agent ${a.agentId}`,
+        description: a.metadata?.description || a.description || '',
+        capabilities: a.capabilities || a.metadata?.capabilities || [],
+        reputation: a.reputationScore ? a.reputationScore / 100 : (a.reputation || 0),
+        totalTasks: a.taskCount || a.totalTasks || 0,
+        price: a.metadata?.pricePerTask || a.basePriceUsdc || a.price || 0,
+        status: a.available !== false ? 'online' : 'offline',
+      }));
+
+      // Client-side filter for online-only
+      if (onlineOnly) {
+        agentList = agentList.filter((a) => a.status === 'online');
+      }
+
+      setAgents(agentList);
+    } catch (err) {
+      console.error('Failed to fetch agents:', err);
+      setError(err.message);
+      // Fallback to empty list on error
+      setAgents([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [search, maxPrice, minReputation, onlineOnly]);
+
+  // Debounced fetch on filter change
+  useEffect(() => {
+    const timer = setTimeout(fetchAgents, 300);
+    return () => clearTimeout(timer);
+  }, [fetchAgents]);
+
+  const filtered = agents.filter((a) => {
     if (a.price > maxPrice) return false;
     if (a.reputation < minReputation) return false;
     if (onlineOnly && a.status !== 'online') return false;
@@ -110,7 +157,25 @@ export default function Explore() {
 
         {/* Agent grid */}
         <div className="flex-1">
-          {filtered.length === 0 ? (
+          {loading ? (
+            <div className="text-center py-20">
+              <div className="flex gap-1 justify-center mb-4">
+                <span className="w-3 h-3 bg-primary-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                <span className="w-3 h-3 bg-primary-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                <span className="w-3 h-3 bg-primary-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+              </div>
+              <p className="text-gray-500">Searching agents...</p>
+            </div>
+          ) : error ? (
+            <div className="text-center py-20">
+              <svg className="w-12 h-12 mx-auto text-red-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+              <p className="text-gray-500 mb-2">Failed to load agents</p>
+              <p className="text-sm text-gray-400">{error}</p>
+              <button onClick={fetchAgents} className="btn-secondary mt-4 text-sm">Retry</button>
+            </div>
+          ) : filtered.length === 0 ? (
             <div className="text-center py-20">
               <svg className="w-12 h-12 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
