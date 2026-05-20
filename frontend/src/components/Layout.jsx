@@ -5,6 +5,7 @@ const navLinks = [
   { to: '/explore', label: 'Explore' },
   { to: '/register', label: 'Register' },
   { to: '/dashboard', label: 'Dashboard' },
+  { to: '/arc', label: 'Arc Protocol' },
 ];
 
 export default function Layout({ children }) {

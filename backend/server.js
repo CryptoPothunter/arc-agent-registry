@@ -31,6 +31,9 @@ const tractionStatsRoutes = require('./routes/traction-stats.routes');
 const faucetRoutes = require('./routes/faucet.routes');
 const privateIntentRoutes = require('./routes/private-intent.routes');
 
+// Arc native protocol routes (ERC-8004 + ERC-8183)
+const arcNativeRoutes = require('./routes/erc8183-jobs.routes');
+
 // --- Autonomous Agent imports ---
 let AutonomousPricingAgent, OrchestratorAgent, MarketMakerAgent;
 try {
@@ -166,6 +169,9 @@ app.use('/api/fund', fundRoutes);
 app.use('/api/stats', tractionStatsRoutes);
 app.use('/api/faucet', faucetRoutes);
 app.use('/api/intent', privateIntentRoutes);
+
+// --- Arc Native Protocol Routes (ERC-8004 + ERC-8183) ---
+app.use('/api/arc', arcNativeRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

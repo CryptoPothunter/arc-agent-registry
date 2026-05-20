@@ -10,11 +10,15 @@ const { ethers } = require('ethers');
 const { uploadToIPFS, fetchFromIPFS } = require('./ipfs.service');
 const { getCache, setCache, CACHE_KEYS, syncOnChainEvent } = require('../config/redis.config');
 const AgentRegistryABI = require('../abis/AgentRegistry.json');
+const ArcNativeIdentityService = require('./arc-native-identity.service');
 
 // Use doc-spec variable names with fallbacks for legacy names
 const RPC_URL = process.env.ARC_RPC_URL || process.env.RPC_URL || 'https://rpc.testnet.arc.network';
 const REGISTRY_ADDRESS = process.env.REGISTRY_CONTRACT || '';
 const OPERATOR_KEY = process.env.DEPLOYER_PRIVATE_KEY || process.env.OPERATOR_PRIVATE_KEY || '';
+
+// ERC-8004 cross-registration support
+const arcIdentityService = new ArcNativeIdentityService();
 
 class RegistryService {
   constructor() {
@@ -206,6 +210,12 @@ class RegistryService {
 
     this._store.set(agentId, agentData);
     await syncOnChainEvent('AgentRegistered', agentData);
+
+    // Cross-register on ERC-8004 IdentityRegistry (non-blocking)
+    this._crossRegisterERC8004(metadata, walletAddress).catch((err) => {
+      console.warn(`[Registry] ERC-8004 cross-registration skipped:`, err.message);
+    });
+
     return agentData;
   }
 
@@ -340,6 +350,32 @@ class RegistryService {
     return Array.from(this._store.values())
       .filter((a) => a.available)
       .map((a) => this._formatAgent(a));
+  }
+
+  /**
+   * Cross-register agent on ERC-8004 IdentityRegistry.
+   * Non-blocking - failures are logged but do not break the main registration.
+   * @param {object} metadata - Agent metadata.
+   * @param {string} walletAddress - Agent wallet address.
+   * @private
+   */
+  async _crossRegisterERC8004(metadata, walletAddress) {
+    const capabilitySchemas = (metadata.capabilities || []).map((cap) => {
+      if (typeof cap === 'string') return { name: cap };
+      return cap;
+    });
+
+    const result = await arcIdentityService.registerAgentOnChain({
+      name: metadata.name,
+      description: metadata.description || '',
+      capabilitySchemas,
+      pricingModel: metadata.capabilities?.[0]?.pricing || { type: 'per_task', basePrice: 0, currency: 'USDC' },
+      availabilityEndpoint: metadata.endpoint || '',
+      wallet: walletAddress,
+    });
+
+    console.log(`[Registry] ERC-8004 cross-registration successful: agentId=${result.agentId}`);
+    return result;
   }
 
   /**

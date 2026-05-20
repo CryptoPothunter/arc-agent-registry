@@ -137,6 +137,59 @@ export const getFaucetStatus = (walletAddress) => request(`/faucet/status/${wall
 // Health check
 export const getHealthStatus = () => request('/health');
 
+// --- Arc Native Protocol (ERC-8004 + ERC-8183) ---
+
+// ERC-8004 Identity
+export const registerArcIdentity = (data) =>
+  request('/arc/identity/register', { method: 'POST', body: JSON.stringify(data) });
+
+export const getArcIdentity = (agentId) => request(`/arc/identity/${agentId}`);
+
+export const updateArcMetadata = (agentId, data) =>
+  request(`/arc/identity/${agentId}/metadata`, { method: 'PUT', body: JSON.stringify(data) });
+
+// ERC-8004 Reputation
+export const giveReputationFeedback = (data) =>
+  request('/arc/reputation/feedback', { method: 'POST', body: JSON.stringify(data) });
+
+// ERC-8004 Validation
+export const requestValidation = (data) =>
+  request('/arc/validation/request', { method: 'POST', body: JSON.stringify(data) });
+
+export const respondValidation = (data) =>
+  request('/arc/validation/respond', { method: 'POST', body: JSON.stringify(data) });
+
+export const getValidationStatus = (requestHash) =>
+  request(`/arc/validation/${requestHash}`);
+
+// ERC-8183 Jobs
+export const createArcJob = (data) =>
+  request('/arc/jobs', { method: 'POST', body: JSON.stringify(data) });
+
+export const setJobBudget = (jobId, data) =>
+  request(`/arc/jobs/${jobId}/budget`, { method: 'POST', body: JSON.stringify(data) });
+
+export const fundArcJob = (jobId, data) =>
+  request(`/arc/jobs/${jobId}/fund`, { method: 'POST', body: JSON.stringify(data) });
+
+export const submitJobDeliverable = (jobId, data) =>
+  request(`/arc/jobs/${jobId}/submit`, { method: 'POST', body: JSON.stringify(data) });
+
+export const completeArcJob = (jobId) =>
+  request(`/arc/jobs/${jobId}/complete`, { method: 'POST' });
+
+export const rejectJobDeliverable = (jobId) =>
+  request(`/arc/jobs/${jobId}/reject`, { method: 'POST' });
+
+export const getArcJob = (jobId) => request(`/arc/jobs/${jobId}`);
+
+// Demo workflows
+export const runIdentityWorkflow = (data) =>
+  request('/arc/demo/identity-workflow', { method: 'POST', body: JSON.stringify(data) });
+
+export const runJobLifecycle = (data) =>
+  request('/arc/demo/job-lifecycle', { method: 'POST', body: JSON.stringify(data) });
+
 export default {
   registerAgent,
   getAgents,
@@ -176,4 +229,21 @@ export default {
   claimFaucet,
   getFaucetStatus,
   getHealthStatus,
+  // Arc Native Protocol (ERC-8004 + ERC-8183)
+  registerArcIdentity,
+  getArcIdentity,
+  updateArcMetadata,
+  giveReputationFeedback,
+  requestValidation,
+  respondValidation,
+  getValidationStatus,
+  createArcJob,
+  setJobBudget,
+  fundArcJob,
+  submitJobDeliverable,
+  completeArcJob,
+  rejectJobDeliverable,
+  getArcJob,
+  runIdentityWorkflow,
+  runJobLifecycle,
 };

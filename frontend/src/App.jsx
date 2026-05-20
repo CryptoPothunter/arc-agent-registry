@@ -8,6 +8,7 @@ import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import NewTask from './pages/NewTask';
 import TaskDetail from './pages/TaskDetail';
+import ArcJobs from './pages/ArcJobs';
 
 function App() {
   return (
@@ -22,6 +23,7 @@ function App() {
         <Route path="/dashboard/earnings" element={<Dashboard tab="earnings" />} />
         <Route path="/tasks/new" element={<NewTask />} />
         <Route path="/tasks/:id" element={<TaskDetail />} />
+        <Route path="/arc" element={<ArcJobs />} />
       </Routes>
     </Layout>
   );

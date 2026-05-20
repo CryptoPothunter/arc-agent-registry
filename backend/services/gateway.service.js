@@ -16,6 +16,9 @@ const SUPPORTED_CHAINS = {
     cctpDomain: 26, // Arc Testnet CCTP domain
     tokenMessenger: '0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA',
     messageTransmitter: '0xE737e5cEBEEBa77EFE34D4aa090756590b1CE275',
+    tokenMinter: '0xb43db544E2c27092c107639Ad201b3dEfAbcF192',
+    gatewayWallet: process.env.GATEWAY_WALLET || '0x0077777d7EBA4688BDeF3E311b846F25870A19B9',
+    gatewayMinter: process.env.GATEWAY_MINTER || '0x0022222ABE238Cc2C7Bb1f21003F0a260052475B',
   },
   'ETH-SEPOLIA': {
     rpcUrl: process.env.ETH_SEPOLIA_RPC || 'https://rpc.sepolia.org',
@@ -47,6 +50,15 @@ const CCTP_TOKEN_MESSENGER_ABI = [
   'function depositForBurn(uint256 amount, uint32 destinationDomain, bytes32 mintRecipient, address burnToken) external returns (uint64 nonce)',
   'event DepositForBurn(uint64 indexed nonce, address indexed burnToken, uint256 amount, address indexed depositor, bytes32 mintRecipient, uint32 destinationDomain, bytes32 destinationTokenMessenger, bytes32 destinationCaller)',
 ];
+
+// CCTP MessageTransmitter ABI for receiving messages on destination chain
+const CCTP_MESSAGE_TRANSMITTER_ABI = [
+  'function receiveMessage(bytes message, bytes attestation) external returns (bool success)',
+  'event MessageReceived(address indexed caller, uint32 sourceDomain, uint64 indexed nonce, bytes32 sender, bytes messageBody)',
+];
+
+// Circle Attestation API
+const CIRCLE_ATTESTATION_API = 'https://iris-api-sandbox.circle.com/v1/attestations';
 
 class GatewayService {
   constructor() {
@@ -276,9 +288,107 @@ class GatewayService {
         chainId: config.chainId,
         explorer: config.explorer,
         cctpDomain: config.cctpDomain,
+        hasGateway: !!(config.gatewayWallet && config.gatewayMinter),
       };
     }
     return chains;
+  }
+
+  /**
+   * Poll Circle Attestation API for a burn message hash.
+   * After depositForBurn, the message hash is used to retrieve the attestation
+   * needed to call receiveMessage on the destination chain.
+   *
+   * @param {string} messageHash - The keccak256 hash of the CCTP message bytes.
+   * @param {number} [maxRetries=30] - Maximum polling attempts.
+   * @param {number} [intervalMs=10000] - Polling interval in milliseconds.
+   * @returns {Promise<object>} Attestation response with message and attestation bytes.
+   */
+  async pollAttestation(messageHash, maxRetries = 30, intervalMs = 10000) {
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        const response = await fetch(`${CIRCLE_ATTESTATION_API}/${messageHash}`);
+        const data = await response.json();
+
+        if (data.status === 'complete' && data.attestation) {
+          return {
+            status: 'complete',
+            attestation: data.attestation,
+            messageHash,
+          };
+        }
+
+        console.log(`[Gateway] Attestation pending (attempt ${i + 1}/${maxRetries})...`);
+      } catch (err) {
+        console.warn(`[Gateway] Attestation poll error:`, err.message);
+      }
+
+      if (i < maxRetries - 1) {
+        await new Promise((resolve) => setTimeout(resolve, intervalMs));
+      }
+    }
+
+    return { status: 'pending', messageHash, message: 'Attestation not yet available. Continue polling.' };
+  }
+
+  /**
+   * Complete a cross-chain transfer by calling receiveMessage on the destination
+   * MessageTransmitter with the Circle attestation.
+   *
+   * @param {object} params
+   * @param {string} params.destChain - Destination chain identifier.
+   * @param {string} params.messageBytes - The original CCTP message bytes.
+   * @param {string} params.attestation - The Circle attestation signature.
+   * @param {object} params.signer - ethers Signer instance on the destination chain.
+   * @returns {Promise<object>} Receive result.
+   */
+  async receiveMessage({ destChain, messageBytes, attestation, signer }) {
+    const destConfig = SUPPORTED_CHAINS[destChain];
+    if (!destConfig) throw new Error(`Unsupported destination chain: ${destChain}`);
+
+    const messageTransmitterAddr = process.env.CCTP_MESSAGE_TRANSMITTER || destConfig.messageTransmitter;
+    if (!messageTransmitterAddr) {
+      return {
+        status: 'simulated',
+        destChain,
+        message: 'MessageTransmitter not configured for destination chain.',
+      };
+    }
+
+    const messageTransmitter = new ethers.Contract(
+      messageTransmitterAddr,
+      CCTP_MESSAGE_TRANSMITTER_ABI,
+      signer
+    );
+
+    const tx = await messageTransmitter.receiveMessage(messageBytes, attestation);
+    const receipt = await tx.wait();
+
+    return {
+      status: 'completed',
+      txHash: receipt.hash,
+      destChain,
+      explorerUrl: `${destConfig.explorer}/tx/${receipt.hash}`,
+    };
+  }
+
+  /**
+   * Get Gateway wallet and minter info for Arc Testnet.
+   * Used for unified balance operations.
+   *
+   * @returns {object} Gateway configuration.
+   */
+  getGatewayConfig() {
+    const arcConfig = SUPPORTED_CHAINS['ARC-TESTNET'];
+    return {
+      gatewayWallet: arcConfig.gatewayWallet,
+      gatewayMinter: arcConfig.gatewayMinter,
+      tokenMessenger: arcConfig.tokenMessenger,
+      messageTransmitter: arcConfig.messageTransmitter,
+      tokenMinter: arcConfig.tokenMinter,
+      chain: 'ARC-TESTNET',
+      chainId: arcConfig.chainId,
+    };
   }
 }
 
